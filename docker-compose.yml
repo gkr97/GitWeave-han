@@ -1,0 +1,53 @@
+version: '3.9'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: github-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: githubpass
+      MYSQL_DATABASE: githubdb
+      MYSQL_USER: githubuser
+      MYSQL_PASSWORD: githubpass
+      TZ: Asia/Seoul
+    ports:
+      - "3306:3306"
+    volumes:
+      - github_mysql_data:/var/lib/mysql
+
+  redis:
+    image: redis:7
+    container_name: github-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - github_redis_data:/data
+
+  dynamodb:
+    image: amazon/dynamodb-local
+    container_name: github-dynamodb
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    command: "-jar DynamoDBLocal.jar -inMemory -sharedDb"
+
+  localstack:
+    image: localstack/localstack:latest
+    container_name: github-localstack
+    restart: unless-stopped
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=s3,sqs,sns
+      - DEFAULT_REGION=ap-northeast-2
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - github_localstack_data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  github_mysql_data:
+  github_redis_data:
+  github_localstack_data:

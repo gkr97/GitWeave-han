@@ -1,0 +1,73 @@
+# Kotlin
+.kotlinc/
+*.kotlin_module
+.ksp/
+build/ksp/
+kapt_generated/
+build/tmp/kapt/
+build/generated/source/kapt/
+build/generated/source/kaptKotlin/
+*.main.kts.cache/
+*.kts.cache/
+build/bin/
+build/obj/
+
+# 환경 변수/로컬 설정
+.env
+.env.*
+.envrc
+
+# Docker Compose/로컬 배포 관련
+docker-compose.override.yml
+docker-compose.local.yml
+docker-compose.dev.yml
+docker-compose.test.yml
+docker-compose.*.yml
+docker-compose.*.yaml
+
+docker-data/
+docker-volumes/
+.docker/
+
+# 로그
+*.log
+logs/
+
+# 기존 툴 관련
+HELP.md
+.gradle
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+### VS Code ###
+.vscode/
