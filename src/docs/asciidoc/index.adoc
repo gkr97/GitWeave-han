@@ -1,0 +1,75 @@
+= GitServer API 명세서
+:toc: left
+:toclevels: 2
+:source-highlighter: highlightjs
+:snippets: build/generated-snippets
+
+== 인증 API
+
+=== 회원가입
+include::{snippets}/auth-register/curl-request.adoc[]
+include::{snippets}/auth-register/httpie-request.adoc[]
+include::{snippets}/auth-register/http-request.adoc[]
+include::{snippets}/auth-register/request-body.adoc[]
+include::{snippets}/auth-register/request-fields.adoc[]
+include::{snippets}/auth-register/http-response.adoc[]
+include::{snippets}/auth-register/response-body.adoc[]
+include::{snippets}/auth-register/response-fields.adoc[]
+
+=== 로그인
+include::{snippets}/auth-login/curl-request.adoc[]
+include::{snippets}/auth-login/httpie-request.adoc[]
+include::{snippets}/auth-login/http-request.adoc[]
+include::{snippets}/auth-login/request-body.adoc[]
+include::{snippets}/auth-login/request-fields.adoc[]
+include::{snippets}/auth-login/http-response.adoc[]
+include::{snippets}/auth-login/response-body.adoc[]
+include::{snippets}/auth-login/response-fields.adoc[]
+
+=== 리프레시
+include::{snippets}/auth-refresh/curl-request.adoc[]
+include::{snippets}/auth-refresh/httpie-request.adoc[]
+include::{snippets}/auth-refresh/http-request.adoc[]
+include::{snippets}/auth-refresh/request-body.adoc[]
+include::{snippets}/auth-refresh/request-fields.adoc[]
+include::{snippets}/auth-refresh/http-response.adoc[]
+include::{snippets}/auth-refresh/response-body.adoc[]
+include::{snippets}/auth-refresh/response-fields.adoc[]
+
+=== 이메일 인증
+include::{snippets}/auth-email-verify/curl-request.adoc[]
+include::{snippets}/auth-email-verify/httpie-request.adoc[]
+include::{snippets}/auth-email-verify/http-request.adoc[]
+include::{snippets}/auth-email-verify/query-parameters.adoc[]
+include::{snippets}/auth-email-verify/http-response.adoc[]
+include::{snippets}/auth-email-verify/response-body.adoc[]
+include::{snippets}/auth-email-verify/response-fields.adoc[]
+
+== 사용자 프로필 API
+
+=== 내 프로필 조회
+include::{snippets}/user-profile-me/curl-request.adoc[]
+include::{snippets}/user-profile-me/httpie-request.adoc[]
+include::{snippets}/user-profile-me/http-request.adoc[]
+include::{snippets}/user-profile-me/http-response.adoc[]
+include::{snippets}/user-profile-me/response-body.adoc[]
+include::{snippets}/user-profile-me/response-fields.adoc[]
+
+=== 이름 변경
+include::{snippets}/user-profile-update-name/curl-request.adoc[]
+include::{snippets}/user-profile-update-name/httpie-request.adoc[]
+include::{snippets}/user-profile-update-name/http-request.adoc[]
+include::{snippets}/user-profile-update-name/request-body.adoc[]
+include::{snippets}/user-profile-update-name/request-fields.adoc[]
+include::{snippets}/user-profile-update-name/http-response.adoc[]
+include::{snippets}/user-profile-update-name/response-body.adoc[]
+include::{snippets}/user-profile-update-name/response-fields.adoc[]
+
+=== 프로필 이미지 업로드
+include::{snippets}/user-profile-upload-image/curl-request.adoc[]
+include::{snippets}/user-profile-upload-image/httpie-request.adoc[]
+include::{snippets}/user-profile-upload-image/http-request.adoc[]
+include::{snippets}/user-profile-upload-image/request-parts.adoc[]
+include::{snippets}/user-profile-upload-image/http-response.adoc[]
+include::{snippets}/user-profile-upload-image/response-body.adoc[]
+include::{snippets}/user-profile-upload-image/response-fields.adoc[]

@@ -57,4 +57,23 @@ data class User(
 
     @Column(name = "is_deleted", nullable = false)
     var isDeleted: Boolean = false
-) 
+) {
+    @PrePersist
+    fun prePersist() {
+        updatedAt = LocalDateTime.now()
+    }
+
+    @PreUpdate
+    fun preUpdate() {
+        updatedAt = LocalDateTime.now()
+    }
+
+    fun verifyEmail() {
+        if (emailVerified) throw IllegalStateException("이미 인증된 이메일입니다.")
+        this.emailVerified = true
+    }
+
+    fun updateProfileImage(imageUrl: String) {
+        this.profileImageUrl = imageUrl
+    }
+}

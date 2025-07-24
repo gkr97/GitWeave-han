@@ -1,9 +1,12 @@
+import org.asciidoctor.gradle.jvm.AsciidoctorTask
+
 plugins {
     kotlin("jvm") version "1.9.25"
     kotlin("plugin.spring") version "1.9.25"
-    id("org.springframework.boot") version "3.5.3"
-    id("io.spring.dependency-management") version "1.1.7"
     kotlin("plugin.jpa") version "1.9.25"
+    id("org.springframework.boot") version "3.3.4"
+    id("io.spring.dependency-management") version "1.1.7"
+    id("org.asciidoctor.jvm.convert") version "3.3.2"
 }
 
 group = "com.example"
@@ -11,7 +14,7 @@ version = "0.0.1-SNAPSHOT"
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion.set(JavaLanguageVersion.of(21))
     }
 }
 
@@ -19,35 +22,100 @@ repositories {
     mavenCentral()
 }
 
+configurations {
+    create("asciidoctorExt")
+}
+
 dependencies {
-    implementation("org.springframework.boot:spring-boot-starter-data-jpa")
-    implementation("org.springframework.boot:spring-boot-starter-graphql")
+    // Spring Boot
     implementation("org.springframework.boot:spring-boot-starter-web")
-    implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
-
-    implementation("org.flywaydb:flyway-core")
-    implementation("org.flywaydb:flyway-mysql")
-    implementation("org.jetbrains.kotlin:kotlin-reflect")
+    implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-security")
-    testImplementation("org.springframework.security:spring-security-test")
-    developmentOnly("org.springframework.boot:spring-boot-devtools")
-    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0")
-    implementation("io.github.microutils:kotlin-logging-jvm:3.0.5")
-
-    implementation("org.eclipse.jgit:org.eclipse.jgit:7.3.0.202506031305-r")
-
-    runtimeOnly("com.mysql:mysql-connector-j")
+    implementation("org.springframework.boot:spring-boot-starter-graphql")
+    implementation("org.springframework.boot:spring-boot-starter-mail")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
 
+    // Kotlin
+    implementation("org.jetbrains.kotlin:kotlin-reflect")
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
+
+    // DB & Validation
+    runtimeOnly("com.mysql:mysql-connector-j")
+    implementation("org.flywaydb:flyway-core")
+    implementation("org.flywaydb:flyway-mysql")
+    implementation("org.hibernate.validator:hibernate-validator")
+    implementation("jakarta.validation:jakarta.validation-api")
+
+    // Logging
+    implementation("io.github.microutils:kotlin-logging-jvm:3.0.5")
+
+    // OpenAPI
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0")
+
+    // JWT
+    implementation("io.jsonwebtoken:jjwt-api:0.11.5")
+    runtimeOnly("io.jsonwebtoken:jjwt-impl:0.11.5")
+    runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.11.5")
+
+    // AWS SDK
+    implementation("software.amazon.awssdk:s3:2.25.67")
+    implementation("software.amazon.awssdk:sqs:2.25.67")
+    implementation("software.amazon.awssdk:sns:2.25.67")
+    implementation("software.amazon.awssdk:dynamodb:2.25.67")
+
+    // Git
+    implementation("org.eclipse.jgit:org.eclipse.jgit:7.3.0.202506031305-r")
+
+    // Spring REST Docs
+    testImplementation("org.springframework.restdocs:spring-restdocs-mockmvc")
+    "asciidoctorExt"("org.springframework.restdocs:spring-restdocs-asciidoctor")
+
+    // Test
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("org.springframework.security:spring-security-test")
+    testImplementation("org.mockito.kotlin:mockito-kotlin:5.2.1")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
     testImplementation("org.springframework.graphql:spring-graphql-test")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
-    implementation("io.awspring.cloud:spring-cloud-aws-starter-s3:3.1.0")
-    implementation("io.awspring.cloud:spring-cloud-aws-starter-sqs:3.1.0")
-    implementation("io.awspring.cloud:spring-cloud-aws-starter-sns:3.1.0")
-    implementation("io.awspring.cloud:spring-cloud-aws-starter-dynamodb:3.1.0")
+    developmentOnly("org.springframework.boot:spring-boot-devtools")
+}
+
+val snippetsDir = file("build/generated-snippets")
+
+tasks.withType<Test> {
+    useJUnitPlatform()
+    outputs.dir(snippetsDir)
+}
+
+tasks.named<AsciidoctorTask>("asciidoctor") {
+    inputs.dir(snippetsDir)
+    dependsOn("test")
+
+    setSourceDir(file("src/docs/asciidoc"))
+    setOutputDir(file("build/docs/asciidoc"))
+
+    configurations("asciidoctorExt")
+
+    attributes(mapOf("snippets" to snippetsDir))
+
+    sources {
+        include("**/index.adoc")
+    }
+
+    outputOptions {
+        backends("html5")
+    }
+}
+
+tasks.register<Copy>("copyRestDocs") {
+    dependsOn("asciidoctor")
+    from("build/docs/asciidoc")
+    into("src/main/resources/static/docs")
+}
+
+tasks.named("bootJar") {
+    dependsOn("copyRestDocs")
 }
 
 kotlin {
@@ -60,8 +128,4 @@ allOpen {
     annotation("jakarta.persistence.Entity")
     annotation("jakarta.persistence.MappedSuperclass")
     annotation("jakarta.persistence.Embeddable")
-}
-
-tasks.withType<Test> {
-    useJUnitPlatform()
 }

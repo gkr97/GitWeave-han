@@ -25,4 +25,14 @@ data class EmailVerification(
 
     @Column(name = "created_at", nullable = false)
     val createdAt: LocalDateTime = LocalDateTime.now()
-) 
+) {
+
+    fun markUsed() {
+        if (isUsed) throw IllegalStateException("이미 사용된 토큰입니다.")
+        this.isUsed = true
+    }
+    fun isExpired(now: LocalDateTime = LocalDateTime.now()): Boolean =
+        expiresAt.isBefore(now)
+    fun canBeUsed(now: LocalDateTime = LocalDateTime.now()): Boolean =
+        !isUsed && !isExpired(now)
+}
