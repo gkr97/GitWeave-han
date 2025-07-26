@@ -17,6 +17,8 @@ import com.example.gitserver.module.user.infrastructure.persistence.UserReposito
 import mu.KotlinLogging
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 
 @Service
 class CreateRepositoryCommandHandler(
@@ -59,12 +61,14 @@ class CreateRepositoryCommandHandler(
         log.info { "저장소 DB 저장 완료: id=${repository.id}" }
 
         try {
-            gitService.initEmptyGitDirectory(
-                repository,
-                initializeReadme = command.initializeReadme,
-                gitignoreTemplate = command.gitignoreTemplate,
-                licenseTemplate = command.licenseTemplate
-            )
+            Thread.startVirtualThread {
+                gitService.initEmptyGitDirectory(
+                    repository,
+                    initializeReadme = command.initializeReadme,
+                    gitignoreTemplate = command.gitignoreTemplate,
+                    licenseTemplate = command.licenseTemplate
+                )
+            }.join()
             log.info { "Git 저장소 초기화 완료: ${repository.name}" }
         } catch (ex: Exception) {
             log.error(ex) { "Git 저장소 초기화 실패: ${repository.name}, 롤백 수행" }
@@ -115,14 +119,25 @@ class CreateRepositoryCommandHandler(
             }
         }
 
-        repositoryEventPublisher.publishRepositoryCreatedEvent(
-            RepositoryCreatedEvent(
-                repositoryId = repository.id,
-                ownerId = repository.owner.id,
-                name = repository.name
-            )
-        )
-        log.info { "저장소 생성 이벤트 발행 완료: repositoryId=${repository.id}" }
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
+                override fun afterCommit() {
+                    try {
+                        repositoryEventPublisher.publishRepositoryCreatedEvent(
+                            RepositoryCreatedEvent(
+                                repositoryId = repository.id,
+                                ownerId = repository.owner.id,
+                                name = repository.name
+                            )
+                        )
+                        log.info { "저장소 생성 이벤트 발행 완료: repositoryId=${repository.id}" }
+                    } catch (e: Exception) {
+                        log.error(e) { "저장소 생성 이벤트 발행 실패: repositoryId=${repository.id}" }
+                    }
+                }
+            })
+        }
 
         return repository
     }

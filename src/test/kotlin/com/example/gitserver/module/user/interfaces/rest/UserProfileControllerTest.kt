@@ -1,7 +1,6 @@
 package com.example.gitserver.module.user.interfaces.rest
 
 import com.example.gitserver.common.jwt.JwtAuthenticationFilter
-import com.example.gitserver.common.response.ApiResponse
 import com.example.gitserver.fixture.UserFixture
 import com.example.gitserver.module.user.application.service.UserProfileCommandService
 import com.example.gitserver.module.user.domain.CustomUserDetails
@@ -36,7 +35,7 @@ import org.springframework.restdocs.request.RequestDocumentation.*
 )
 @AutoConfigureMockMvc(addFilters = false)
 @AutoConfigureRestDocs
-class UserProfileControllerRestDocsTest @Autowired constructor(
+class UserProfileControllerTest @Autowired constructor(
     val mockMvc: MockMvc,
     val objectMapper: ObjectMapper
 ) {

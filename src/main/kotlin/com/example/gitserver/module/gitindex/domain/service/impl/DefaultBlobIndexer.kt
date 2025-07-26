@@ -15,9 +15,9 @@ import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.revwalk.RevWalk
 import org.eclipse.jgit.treewalk.TreeWalk
 import org.springframework.stereotype.Service
-import org.springframework.transaction.annotation.Transactional
 import java.nio.file.Path
 import java.time.Instant
+import java.util.concurrent.Semaphore
 
 private val log = KotlinLogging.logger {}
 
@@ -28,7 +28,6 @@ class DefaultBlobIndexer(
     private val userRepository: UserRepository,
 ) : BlobIndexer {
 
-    @Transactional
     override fun indexRepository(repositoryId: Long, workDir: Path) {
         log.info { "[indexRepository] 시작 - repositoryId=$repositoryId, workDir=$workDir" }
 
@@ -40,9 +39,7 @@ class DefaultBlobIndexer(
 
         git.use {
             RevWalk(it.repository).use { revWalk ->
-                val head = it.repository.resolve("HEAD")
-                    ?: throw GitHeadNotFoundException()
-
+                val head = it.repository.resolve("HEAD") ?: throw GitHeadNotFoundException()
                 val commit = try {
                     revWalk.parseCommit(head)
                 } catch (e: Exception) {
@@ -56,8 +53,6 @@ class DefaultBlobIndexer(
                 val authorEmail = commit.authorIdent.emailAddress
                 val authorId = userRepository.findByEmail(authorEmail)?.id
                     ?: throw AuthorNotFoundException(authorEmail)
-
-                log.info { "커밋 파싱 완료 - hash=${commit.name}, author=${commit.authorIdent.name}" }
 
                 val commitVo = Commit(
                     repositoryId = repositoryId,
@@ -75,15 +70,22 @@ class DefaultBlobIndexer(
                     branch = branch,
                 )
                 gitIndexWriter.saveCommit(commitVo)
+                log.info { "커밋 저장 완료 - hash=${commit.name}, author=${commit.authorIdent.name}" }
 
                 val treeWalk = TreeWalk(it.repository).apply {
                     addTree(tree)
                     isRecursive = true
                 }
 
+                val semaphore = Semaphore(20)
+                val tasks = mutableListOf<Runnable>()
+
                 while (treeWalk.next()) {
+
                     val path = treeWalk.pathString
                     val objectId = treeWalk.getObjectId(0)
+                    val isDirectory = treeWalk.isSubtree
+
                     val bytes = try {
                         it.repository.open(objectId).bytes
                     } catch (e: Exception) {
@@ -95,41 +97,55 @@ class DefaultBlobIndexer(
                     val extension = path.substringAfterLast('.', "")
                     val mimeType = bytes.detectMimeType()
 
-                    try {
-                        blobUploader.upload(repositoryId, hash, bytes)
-                    } catch (e: Exception) {
-                        throw S3UploadException(path, hash, e)
+                    tasks += Runnable {
+                        log.debug { "[가상 스레드 시작] path=$path, hash=$hash" }
+                        try {
+                            blobUploader.upload(repositoryId, hash, bytes)
+
+                            val blobVo = Blob(
+                                repositoryId = repositoryId,
+                                hash = BlobHash(hash),
+                                path = FilePath(path),
+                                extension = extension,
+                                mimeType = mimeType,
+                                isBinary = bytes.isBinaryFile(),
+                                fileSize = bytes.size.toLong(),
+                                lineCount = bytes.countLines(),
+                                externalStorageKey = "blobs/$hash",
+                                createdAt = Instant.now()
+                            )
+                            gitIndexWriter.saveBlob(blobVo)
+
+                            val treeVo = BlobTree(
+                                repositoryId = repositoryId,
+                                commitHash = CommitHash(commit.name),
+                                path = FilePath(path),
+                                name = path.substringAfterLast('/'),
+                                isDirectory = isDirectory,
+                                fileHash = hash,
+                                size = bytes.size.toLong(),
+                                depth = path.count { it == '/' },
+                                fileTypeCodeId = null,
+                                lastModifiedAt = Instant.now()
+                            )
+                            gitIndexWriter.saveTree(treeVo)
+
+                            log.debug { "가상 스레드 처리 완료 - path=$path, hash=$hash" }
+                        } catch (e: Exception) {
+                            log.warn(e) { "파일 처리 실패 - path=$path, hash=$hash" }
+                        } finally {
+                            semaphore.release()
+                        }
                     }
+                }
 
-                    log.debug { "업로드 완료 - path=$path, hash=$hash, size=${bytes.size}" }
+                tasks.forEach { task ->
+                    semaphore.acquire()
+                    Thread.startVirtualThread(task)
+                }
 
-                    val blobVo = Blob(
-                        repositoryId = repositoryId,
-                        hash = BlobHash(hash),
-                        path = FilePath(path),
-                        extension = extension,
-                        mimeType = mimeType,
-                        isBinary = bytes.isBinaryFile(),
-                        fileSize = bytes.size.toLong(),
-                        lineCount = bytes.countLines(),
-                        externalStorageKey = "blobs/$hash",
-                        createdAt = Instant.now()
-                    )
-                    gitIndexWriter.saveBlob(blobVo)
-
-                    val treeVo = BlobTree(
-                        repositoryId = repositoryId,
-                        commitHash = CommitHash(commit.name),
-                        path = FilePath(path),
-                        name = path.substringAfterLast('/'),
-                        isDirectory = treeWalk.isSubtree,
-                        fileHash = hash,
-                        size = bytes.size.toLong(),
-                        depth = path.count { it == '/' },
-                        fileTypeCodeId = null,
-                        lastModifiedAt = Instant.now()
-                    )
-                    gitIndexWriter.saveTree(treeVo)
+                repeat(semaphore.availablePermits()) {
+                    semaphore.acquire()
                 }
 
                 log.info { "[indexRepository] 완료 - repositoryId=$repositoryId" }

@@ -1,59 +1,59 @@
 package com.example.gitserver.module.repository.infrastructure.sqs
 
-
-import com.example.gitserver.module.gitindex.domain.service.BlobIndexer
 import com.example.gitserver.module.repository.domain.event.RepositoryCreatedEvent
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import com.fasterxml.jackson.module.kotlin.readValue
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import software.amazon.awssdk.services.sqs.SqsClient
-import software.amazon.awssdk.services.sqs.model.ReceiveMessageRequest
+import org.springframework.beans.factory.annotation.Value
+import java.util.concurrent.Semaphore
 import java.nio.file.Paths
-
-private val logger = mu.KotlinLogging.logger {}
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.fasterxml.jackson.module.kotlin.readValue
+import mu.KotlinLogging
 
 @Component
 class RepositoryIndexingSqsScheduledListener(
     private val sqsClient: SqsClient,
-    private val blobIndexer: BlobIndexer,
-    @Value("\${git.storage.workdir-path}") private val workdirRootPath: String,
-    @Value("\${cloud.aws.sqs.queue-url}") private val queueUrl: String
+    private val indexingJobExecutor: IndexingJobExecutor,
+    @Value("\${cloud.aws.sqs.queue-url}") private val queueUrl: String,
+    @Value("\${git.storage.workdir-path}") private val workdirRootPath: String
 ) {
-
+    private val log = KotlinLogging.logger {}
+    private val semaphore = Semaphore(10)
     private val objectMapper = jacksonObjectMapper()
 
-    /**
-     * SQS에서 메시지를 주기적으로 폴링하여 레포지토리 색인 작업을 수행합니다.
-     * 5초마다 실행되며, 최대 10개의 메시지를 가져옵니다.
-     */
     @Scheduled(fixedDelay = 5000)
     fun pollQueue() {
-        val request = ReceiveMessageRequest.builder()
-            .queueUrl(queueUrl)
-            .maxNumberOfMessages(10)
-            .waitTimeSeconds(10)
-            .build()
+        val messages = sqsClient.receiveMessage {
+            it.queueUrl(queueUrl)
+                .maxNumberOfMessages(10)
+                .waitTimeSeconds(10)
+                .visibilityTimeout(300)
+        }.messages()
 
-        val messages = sqsClient.receiveMessage(request).messages()
+        messages.forEach { message ->
+            if (semaphore.tryAcquire()) {
+                Thread.startVirtualThread {
+                    try {
+                        val event = objectMapper.readValue<RepositoryCreatedEvent>(message.body())
+                        val workDir = Paths.get(workdirRootPath, event.ownerId.toString(), event.name)
 
-        for (message in messages) {
-            try {
-                val event = objectMapper.readValue<RepositoryCreatedEvent>(message.body())
-                val workDir = Paths.get(workdirRootPath, event.ownerId.toString(), event.name)
+                        indexingJobExecutor.indexRepository(event, workDir)
 
-                blobIndexer.indexRepository(event.repositoryId, workDir)
+                        sqsClient.deleteMessage {
+                            it.queueUrl(queueUrl)
+                                .receiptHandle(message.receiptHandle())
+                        }
 
-                sqsClient.deleteMessage {
-                    it.queueUrl(queueUrl)
-                        .receiptHandle(message.receiptHandle())
+                        log.info { "색인 완료 (Virtual Thread): ${event.repositoryId}" }
+                    } catch (e: Exception) {
+                        log.error(e) { "색인 실패: ${message.body()}" }
+                    } finally {
+                        semaphore.release()
+                    }
                 }
-
-                logger.info { "색인 완료: ${event.repositoryId} (${event.ownerId}/${event.name})" }
-            } catch (e: Exception) {
-                logger.error(e) { "색인 작업 실패: ${message.body()}" }
-                // TODO: DLQ 처리 또는 로그 적재
+            } else {
+                log.warn { "병렬 한도 초과. 메시지 건너뜀: ${message.messageId()}" }
             }
         }
     }

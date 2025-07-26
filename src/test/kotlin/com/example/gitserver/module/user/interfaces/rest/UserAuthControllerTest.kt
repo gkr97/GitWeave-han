@@ -13,7 +13,6 @@ import com.example.gitserver.module.user.application.service.AuthQueryService
 import com.example.gitserver.module.user.infrastructure.email.EmailVerifcationService
 import com.example.gitserver.module.user.interfaces.rest.dto.LoginRequest
 import com.example.gitserver.module.user.interfaces.rest.dto.RefreshRequest
-import com.example.gitserver.module.user.interfaces.rest.dto.UserResponse
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
@@ -43,7 +42,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
 )
 @AutoConfigureMockMvc(addFilters = false)
 @AutoConfigureRestDocs
-class UserAuthControllerRestDocsTest(
+class UserAuthControllerTest(
     @Autowired val mockMvc: MockMvc,
     @Autowired val objectMapper: ObjectMapper,
 ) {

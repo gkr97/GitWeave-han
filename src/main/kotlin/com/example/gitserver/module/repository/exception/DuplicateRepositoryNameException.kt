@@ -34,3 +34,9 @@ class UserNotFoundException(userId: Long) : BusinessException(
     code = "USER_NOT_FOUND",
     message = "해당 사용자를 찾을 수 없습니다. userId=$userId"
 )
+
+class RepositoryAccessDeniedException(repoId: Long, userId: Long?) : BusinessException(
+    code = "REPO_ACCESS_DENIED",
+    message = "저장소에 접근할 수 없습니다. repoId=$repoId, userId=$userId",
+    status = HttpStatus.FORBIDDEN
+)

@@ -18,6 +18,6 @@ class RepositoryQueryResolver(
         @Argument branch: String?,
         @AuthenticationPrincipal user: CustomUserDetails?
     ): RepoDetailResponse {
-        return repositoryQueryService.getRepository(id, branch)
+        return repositoryQueryService.getRepository(id, branch, user?.getUserId())
     }
 }

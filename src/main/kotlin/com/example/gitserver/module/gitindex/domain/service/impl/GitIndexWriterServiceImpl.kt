@@ -17,6 +17,7 @@ class GitIndexWriterServiceImpl(
     private val treeRepo: TreeDynamoRepository
 ) : GitIndexWriter {
 
+
     @Transactional
     override fun saveCommit(commit: Commit) {
         commitRepo.save(commit)
