@@ -47,4 +47,40 @@ data class Repository(
 
     @Column(name = "is_deleted", nullable = false)
     var isDeleted: Boolean = false
-) 
+) {
+    @PrePersist
+    fun prePersist() {
+        updatedAt = LocalDateTime.now()
+    }
+
+    @PreUpdate
+    fun preUpdate() {
+        updatedAt = LocalDateTime.now()
+    }
+
+    companion object {
+        fun create(
+            owner: User,
+            name: String,
+            description: String?,
+            visibilityCodeId: Long?,
+            defaultBranch: String,
+            license: String?,
+            language: String?,
+            homepageUrl: String?,
+            topics: String?
+        ): Repository {
+            return Repository(
+                owner = owner,
+                name = name,
+                description = description,
+                visibilityCodeId = visibilityCodeId,
+                defaultBranch = defaultBranch,
+                license = license,
+                language = language,
+                homepageUrl = homepageUrl,
+                topics = topics
+            )
+        }
+    }
+}

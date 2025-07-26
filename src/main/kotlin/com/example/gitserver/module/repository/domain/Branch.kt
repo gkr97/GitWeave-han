@@ -31,4 +31,25 @@ data class Branch(
 
     @Column(name = "is_default", nullable = false)
     var isDefault: Boolean = false
-) 
+) {
+
+    @PrePersist
+    fun prePersist() {
+        createdAt = LocalDateTime.now()
+    }
+
+    fun updateHeadCommitHash(commitHash: String) {
+        this.headCommitHash = commitHash
+    }
+
+    companion object {
+        fun createDefault(repository: Repository, branchName: String): Branch {
+            return Branch(
+                repository = repository,
+                name = branchName,
+                isDefault = true
+            )
+        }
+
+    }
+}

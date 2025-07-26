@@ -14,13 +14,11 @@ import org.mockito.kotlin.any
 class EmailVerifcationServiceTest {
     private val userRepository = mock(UserRepository::class.java)
     private val emailVerificationRepository = mock(EmailVerificationRepository::class.java)
-    private val mailUtils = mock(MailUtils::class.java)
     private val emailVerificationProducer = mock(EmailVerificationProducer::class.java)
 
     private val service = EmailVerifcationService(
         userRepository,
         emailVerificationRepository,
-        mailUtils,
         emailVerificationProducer
     )
 

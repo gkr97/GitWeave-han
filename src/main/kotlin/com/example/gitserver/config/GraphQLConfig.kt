@@ -1,11 +1,16 @@
 package com.example.gitserver.config
 
+import graphql.scalars.ExtendedScalars
+import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.graphql.execution.RuntimeWiringConfigurer
-import org.springframework.context.annotation.Bean
 
 @Configuration
 class GraphQLConfig {
+
     @Bean
-    fun runtimeWiringConfigurer(): RuntimeWiringConfigurer = RuntimeWiringConfigurer { }
-} 
+    fun runtimeWiringConfigurer(): RuntimeWiringConfigurer = RuntimeWiringConfigurer {
+        it.scalar(ExtendedScalars.GraphQLLong)
+    }
+
+}

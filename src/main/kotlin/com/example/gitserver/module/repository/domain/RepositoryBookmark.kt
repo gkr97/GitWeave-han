@@ -20,10 +20,14 @@ data class RepositoryBookmark(
     val repository: Repository,
 
     @Column(name = "created_at", nullable = false)
-    val createdAt: LocalDateTime = LocalDateTime.now()
-)
+    var createdAt: LocalDateTime = LocalDateTime.now()
+) {
+    @PrePersist
+    fun prePersist() {
+        createdAt = LocalDateTime.now()
+    }
+}
 
-// 복합키 클래스
 data class RepositoryBookmarkId(
     val user: Long = 0,
     val repository: Long = 0

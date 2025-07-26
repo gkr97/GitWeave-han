@@ -7,24 +7,27 @@ object UserFixture {
     fun default(
         id: Long = 1L,
         email: String = "test@test.com",
-        name: String? = "테스트유저",
-        emailVerified: Boolean = false,
+        name: String = "테스트유저",
+        passwordHash: String = "encoded-password",
+        emailVerified: Boolean = true,
+        isActive: Boolean = true,
         isDeleted: Boolean = false
     ): User {
         return User(
             id = id,
             email = email,
-            passwordHash = "hashed",
-            name = name,
+            passwordHash = passwordHash,
+            name = "테스트유저",
             profileImageUrl = null,
             bio = null,
             websiteUrl = null,
             timezone = null,
             emailVerified = emailVerified,
-            isActive = !isDeleted,
+            isActive = isActive,
             isDeleted = isDeleted,
             createdAt = LocalDateTime.now()
         )
     }
 }
+
 

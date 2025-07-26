@@ -34,6 +34,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-graphql")
     implementation("org.springframework.boot:spring-boot-starter-mail")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
+    implementation("com.graphql-java:graphql-java-extended-scalars:20.1")
 
     // Kotlin
     implementation("org.jetbrains.kotlin:kotlin-reflect")
@@ -62,9 +63,14 @@ dependencies {
     implementation("software.amazon.awssdk:sqs:2.25.67")
     implementation("software.amazon.awssdk:sns:2.25.67")
     implementation("software.amazon.awssdk:dynamodb:2.25.67")
+    implementation("software.amazon.awssdk:auth")
 
     // Git
     implementation("org.eclipse.jgit:org.eclipse.jgit:7.3.0.202506031305-r")
+    implementation("org.apache.tika:tika-core:2.9.0")
+
+    // S3 Blob Uploader
+    implementation("org.commonmark:commonmark:0.21.0")
 
     // Spring REST Docs
     testImplementation("org.springframework.restdocs:spring-restdocs-mockmvc")

@@ -6,10 +6,15 @@ import jakarta.persistence.*
 @Entity
 @Table(name = "repository_stats")
 data class RepositoryStats(
+
     @Id
+    @Column(name = "repository_id")
+    val id: Long? = null,
+
+    @MapsId
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "repository_id", nullable = false)
-    val repository: Repository,
+    var repository: Repository,
 
     @Column(nullable = false)
     var stars: Int = 0,

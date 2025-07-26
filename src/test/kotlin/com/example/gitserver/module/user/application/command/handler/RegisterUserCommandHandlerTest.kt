@@ -22,7 +22,8 @@ class RegisterUserCommandHandlerTest {
     private val handler = RegisterUserCommandHandler(
         userRepository,
         passwordEncoder,
-        messageSourceAccessor
+        messageSourceAccessor,
+        codeCacheService = mock(),
     )
 
     @Test

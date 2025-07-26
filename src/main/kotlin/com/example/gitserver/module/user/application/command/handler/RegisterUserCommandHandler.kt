@@ -1,5 +1,6 @@
 package com.example.gitserver.module.user.application.command.handler
 
+import com.example.gitserver.module.common.service.CommonCodeCacheService
 import com.example.gitserver.module.user.application.command.RegisterUserCommand
 import com.example.gitserver.module.user.domain.User
 import com.example.gitserver.module.user.exception.RegisterUserException
@@ -8,6 +9,7 @@ import mu.KotlinLogging
 import org.springframework.context.support.MessageSourceAccessor
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
+import java.util.*
 
 
 @Service
@@ -15,6 +17,7 @@ class RegisterUserCommandHandler(
     private val userRepository: UserRepository,
     private val passwordEncoder: PasswordEncoder,
     private val messageSourceAccessor: MessageSourceAccessor,
+    private val codeCacheService: CommonCodeCacheService,
 ) {
     private val log = KotlinLogging.logger {}
 
@@ -38,7 +41,10 @@ class RegisterUserCommandHandler(
             passwordHash = passwordEncoder.encode(command.password),
             name = command.name,
             isActive = true,
-            isDeleted = false
+            isDeleted = false,
+            providerCodeId = codeCacheService.getCodeDetailsOrLoad("PROVIDER")
+                .firstOrNull { it.code == "local" }?.id ?: 1L,
+            timezone = "Asia/Seoul",
         )
 
         try {

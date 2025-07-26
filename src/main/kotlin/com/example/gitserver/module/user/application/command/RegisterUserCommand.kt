@@ -20,5 +20,7 @@ data class RegisterUserCommand(
     val password: String,
 
     @field:Size(max = 30, message = "이름은 최대 30자까지 허용합니다.")
-    val name: String? = null
+    val name: String? = null,
+
+    val providerCode: String = "local"
 )

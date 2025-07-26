@@ -1,0 +1,84 @@
+scalar Long
+
+type Query {
+    repository(id: Long!, branch: String): RepositoryResponse!
+}
+
+type RepositoryResponse {
+    id: Long!
+    name: String!
+    description: String
+    visibility: String!
+    createdAt: String!
+    lastUpdatedAt: String
+    owner: RepositoryUserResponse!
+    isBookmarked: Boolean!
+    isOwner: Boolean!
+    isInvited: Boolean!
+    contributors: [RepositoryUserResponse!]!
+    openPrCount: Int!
+    languageStats: [LanguageStatResponse!]!
+    cloneUrls: CloneUrlsResponse!
+    readme: ReadmeResponse!
+    defaultBranch: String!
+    branches: [BranchResponse!]!
+    stats: RepositoryStatsResponse!
+    fileTree: [TreeNodeResponse!]!
+}
+
+type TreeNodeResponse {
+    name: String!
+    path: String!
+    isDirectory: Boolean!
+    size: Long
+}
+
+type RepositoryUserResponse {
+    userId: Long!
+    nickname: String!
+    profileImageUrl: String
+}
+
+type LanguageStatResponse {
+    extension: String!
+    count: Int!
+    ratio: Float!
+}
+
+type CloneUrlsResponse {
+    https: String!
+    ssh: String!
+    zip: String!
+}
+
+type ReadmeResponse {
+    exists: Boolean!
+    path: String!
+    blobHash: String
+    content: String     #
+    html: String
+}
+
+type BranchResponse {
+    name: String!
+    isDefault: Boolean!
+    isProtected: Boolean!
+    createdAt: String!
+    headCommit: CommitResponse!
+}
+
+type CommitResponse {
+    hash: String!
+    message: String!
+    committedAt: String!
+    author: RepositoryUserResponse!
+}
+
+type RepositoryStatsResponse {
+    stars: Int!
+    forks: Int!
+    watchers: Int!
+    issues: Int!
+    pullRequests: Int!
+    lastCommitAt: String
+}

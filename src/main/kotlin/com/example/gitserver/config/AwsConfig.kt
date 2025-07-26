@@ -6,9 +6,9 @@ import org.springframework.context.annotation.Configuration
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
 import software.amazon.awssdk.regions.Region
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient
 import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.sqs.SqsClient
-import software.amazon.awssdk.services.sqs.SqsClientBuilder
 import java.net.URI
 
 @Configuration
@@ -18,6 +18,11 @@ class AwsConfig(
     @Value("\${cloud.aws.region.static}") private val region: String,
     @Value("\${cloud.aws.credentials.access-key}") private val accessKey: String,
     @Value("\${cloud.aws.credentials.secret-key}") private val secretKey: String,
+
+    @Value("\${dynamodb.endpoint}") private val dynamoEndpoint: String,
+    @Value("\${dynamodb.region}") private val dynamoRegion: String,
+    @Value("\${dynamodb.access-key}") private val dynamoAccessKey: String,
+    @Value("\${dynamodb.secret-key}") private val dynamoSecretKey: String,
 ) {
 
     @Bean
@@ -39,5 +44,12 @@ class AwsConfig(
         )
         .build()
 
-
+    @Bean
+    fun dynamoDbClient(): DynamoDbClient = DynamoDbClient.builder()
+        .endpointOverride(URI.create(dynamoEndpoint))
+        .region(Region.of(dynamoRegion))
+        .credentialsProvider(
+            StaticCredentialsProvider.create(AwsBasicCredentials.create(dynamoAccessKey, dynamoSecretKey))
+        )
+        .build()
 }

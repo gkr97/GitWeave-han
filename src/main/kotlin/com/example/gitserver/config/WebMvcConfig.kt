@@ -1,12 +1,14 @@
 package com.example.gitserver.config
 
 import org.springframework.context.annotation.Configuration
+import org.springframework.web.method.support.HandlerMethodArgumentResolver
 import org.springframework.web.servlet.config.annotation.CorsRegistry
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer
 
 @Configuration
-class WebMvcConfig : WebMvcConfigurer {
+class WebMvcConfig(
+) : WebMvcConfigurer{
     override fun addCorsMappings(registry: CorsRegistry) {
         registry.addMapping("/**")
             .allowedOrigins("*")
@@ -16,7 +18,8 @@ class WebMvcConfig : WebMvcConfigurer {
     }
 
     override fun addResourceHandlers(registry: ResourceHandlerRegistry) {
-        registry.addResourceHandler("/static/**")
-            .addResourceLocations("classpath:/static/")
+        registry
+            .addResourceHandler("/graphiql/**")
+            .addResourceLocations("classpath:/static/graphiql/")
     }
 } 
