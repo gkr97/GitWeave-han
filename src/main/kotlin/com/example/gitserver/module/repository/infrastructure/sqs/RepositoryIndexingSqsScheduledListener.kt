@@ -10,6 +10,7 @@ import java.nio.file.Paths
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import mu.KotlinLogging
+import java.nio.file.Files
 
 @Component
 class RepositoryIndexingSqsScheduledListener(
@@ -39,6 +40,15 @@ class RepositoryIndexingSqsScheduledListener(
                         val workDir = Paths.get(workdirRootPath, event.ownerId.toString(), event.name)
 
                         indexingJobExecutor.indexRepository(event, workDir)
+
+                        try {
+                            Files.walk(workDir)
+                                .sorted(Comparator.reverseOrder())
+                                .forEach { Files.deleteIfExists(it) }
+                            log.info { "워킹 디렉토리 삭제 완료: $workDir" }
+                        } catch (e: Exception) {
+                            log.warn(e) { "워킹 디렉토리 삭제 실패: $workDir" }
+                        }
 
                         sqsClient.deleteMessage {
                             it.queueUrl(queueUrl)

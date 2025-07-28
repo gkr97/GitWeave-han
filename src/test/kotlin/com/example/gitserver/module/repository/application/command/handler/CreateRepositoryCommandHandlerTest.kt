@@ -5,7 +5,6 @@ import com.example.gitserver.module.common.dto.CommonCodeDetailResponse
 import com.example.gitserver.module.common.service.CommonCodeCacheService
 import com.example.gitserver.module.repository.application.command.CreateRepositoryCommand
 import com.example.gitserver.module.repository.application.service.GitService
-import com.example.gitserver.module.repository.domain.Repository
 import com.example.gitserver.module.repository.domain.event.RepositoryEventPublisher
 import com.example.gitserver.module.repository.exception.*
 import com.example.gitserver.module.repository.infrastructure.persistence.BranchRepository
@@ -13,10 +12,12 @@ import com.example.gitserver.module.repository.infrastructure.persistence.Collab
 import com.example.gitserver.module.repository.infrastructure.persistence.RepositoryRepository
 import com.example.gitserver.module.user.infrastructure.persistence.UserRepository
 import org.assertj.core.api.Assertions.*
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.mockito.kotlin.*
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.util.*
 
 class CreateRepositoryCommandHandlerTest {
@@ -45,6 +46,12 @@ class CreateRepositoryCommandHandlerTest {
             collaboratorRepository,
             userRepository
         )
+        TransactionSynchronizationManager.initSynchronization()
+    }
+
+    @AfterEach
+    fun tearDown() {
+        TransactionSynchronizationManager.clearSynchronization()
     }
 
     private fun defaultCommand(
@@ -84,6 +91,8 @@ class CreateRepositoryCommandHandlerTest {
         verify(repositoryRepository).saveAndFlush(any())
         verify(branchRepository).save(any())
         verify(collaboratorRepository, times(2)).save(any()) // owner + invitee
+
+        TransactionSynchronizationManager.getSynchronizations().forEach { it.afterCommit() }
         verify(repositoryEventPublisher).publishRepositoryCreatedEvent(any())
     }
 
@@ -108,26 +117,6 @@ class CreateRepositoryCommandHandlerTest {
         assertThrows<InvalidVisibilityCodeException> {
             handler.handle(command)
         }
-    }
-
-    @Test
-    fun `Git 저장소 초기화 실패시 롤백 및 예외`() {
-        whenever(repositoryRepository.existsByOwnerIdAndName(any(), any())).thenReturn(false)
-        whenever(commonCodeCacheService.getCodeDetailsOrLoad("VISIBILITY"))
-            .thenReturn(listOf(CommonCodeDetailResponse(1L, "PUBLIC", "공개", 0, true)))
-        whenever(commonCodeCacheService.getCodeDetailsOrLoad("ROLE"))
-            .thenReturn(listOf(CommonCodeDetailResponse(1L, "owner", "소유자", 0, true)))
-        whenever(gitService.initEmptyGitDirectory(any(), any(), anyOrNull(), anyOrNull()))
-            .thenThrow(RuntimeException("init 실패"))
-
-        val command = defaultCommand()
-
-        assertThrows<GitInitializationFailedException> {
-            handler.handle(command)
-        }
-
-        verify(repositoryRepository).delete(any())
-        verify(gitService).deleteGitDirectories(any())
     }
 
     @Test

@@ -6,4 +6,5 @@ import org.springframework.data.jpa.repository.JpaRepository
 
 interface BookmarkRepository : JpaRepository<RepositoryBookmark, RepositoryBookmarkId> {
     fun existsByUserIdAndRepositoryId(userId: Long, repositoryId: Long): Boolean
+    fun findByUserId(userId: Long): List<RepositoryBookmark>
 }

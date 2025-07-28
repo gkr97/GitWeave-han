@@ -4,5 +4,7 @@ data class TreeNodeResponse(
     val name: String,
     val path: String,
     val isDirectory: Boolean,
-    val size: Long? = null
+    val size: Long? = null,
+    val lastCommitMessage: String? = null,
+    val lastCommittedAt: String? = null
 )

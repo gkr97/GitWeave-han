@@ -14,5 +14,7 @@ interface CollaboratorRepository: JpaRepository<Collaborator, Long> {
     fun findAllWithUserByRepositoryId(@Param("repoId") repoId: Long): List<Collaborator>
     @Query("SELECT c FROM Collaborator c WHERE c.repository.id = :repoId AND c.accepted = true")
     fun findAllAcceptedByRepositoryId(@Param("repoId") repoId: Long): List<Collaborator>
-
+    @Query("SELECT c FROM Collaborator c WHERE c.accepted = true AND c.user.id = :userId AND c.repository.id = :repoId")
+    fun existsByRepositoryIdAndUserIdAndAcceptedTrue(repoId: Long, userId: Long): Boolean
+    fun findAcceptedByUserId(userId: Long): List<Collaborator>
 }

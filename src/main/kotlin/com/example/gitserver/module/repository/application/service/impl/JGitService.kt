@@ -3,14 +3,11 @@ package com.example.gitserver.module.repository.application.service.impl
 import com.example.gitserver.module.repository.application.service.GitService
 import com.example.gitserver.module.repository.domain.Repository
 import com.example.gitserver.module.repository.interfaces.dto.CloneUrlsResponse
-import com.example.gitserver.module.repository.interfaces.dto.LanguageStatResponse
-import com.example.gitserver.module.repository.interfaces.dto.ReadmeResponse
 import mu.KotlinLogging
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.lib.PersonIdent
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
-import software.amazon.awssdk.services.s3.S3Client
 import java.nio.file.Files
 import java.nio.file.Paths
 import java.time.Instant
@@ -22,8 +19,7 @@ private val log = KotlinLogging.logger {}
 class JGitService(
     @Value("\${git.storage.bare-path}") private val bareRootPath: String,
     @Value("\${git.storage.workdir-path}") private val workdirRootPath: String,
-    @Value("\${cloud.aws.s3.bucket}") private var bucketName: String,
-    @Value("\${cloud.aws.s3.endpoint}") private val s3EndPoint: String,
+    @Value("\${git.server.base-url}") private val gitBaseUrl: String,
 ) : GitService {
 
     /**
@@ -42,7 +38,7 @@ class JGitService(
         val ownerId = repository.owner.id.toString()
         val repoName = repository.name
 
-        val bareRepoPath = Paths.get(bareRootPath, ownerId, repoName)
+        val bareRepoPath = Paths.get(bareRootPath, ownerId, "$repoName.git")
         val workDirPath = Paths.get(workdirRootPath, ownerId, repoName)
 
         log.info { "[Git] 저장소 초기화 시작 - repository=$repoName, ownerId=$ownerId" }
@@ -60,6 +56,8 @@ class JGitService(
             .setBare(true)
             .call()
         log.info { "[Git] bare 저장소 초기화 완료 - path=$bareRepoPath" }
+
+        bareRepoPath.resolve("git-daemon-export-ok").toFile().createNewFile()
 
         try {
             val git = Git.cloneRepository()
@@ -118,8 +116,14 @@ class JGitService(
 
                 git.repository.updateRef("HEAD").link("refs/heads/$defaultBranch")
 
+
                 git.push().call()
                 log.info { "[Git] 초기 커밋 및 푸시 완료 - repo=$repoName, branch=$defaultBranch" }
+
+                val bareGit = Git.open(bareRepoPath.toFile())
+                bareGit.repository.updateRef("HEAD").link("refs/heads/$defaultBranch")
+                bareGit.close()
+
             }
 
             log.info { "[Git] 저장소 clone 완료 - from=$bareRepoPath to=$workDirPath" }
@@ -140,7 +144,7 @@ class JGitService(
     override fun deleteGitDirectories(repository: Repository) {
         val ownerId = repository.owner.id.toString()
         val repoName = repository.name
-        val bareRepoPath = Paths.get(bareRootPath, ownerId, repoName)
+        val bareRepoPath = Paths.get(bareRootPath, ownerId, "$repoName.git")
         val workDirPath = Paths.get(workdirRootPath, ownerId, repoName)
 
         try {
@@ -156,18 +160,26 @@ class JGitService(
      * @param repository 대상 저장소
      * @return 언어 통계 정보
      */
-    override fun getCloneUrls(repoId: Long): CloneUrlsResponse {
+    override fun getCloneUrls(repository: Repository): CloneUrlsResponse {
+        val ownerId = repository.owner.id
+        val repoName = repository.name
         return CloneUrlsResponse(
-            https = "$s3EndPoint/$bucketName/repos/$repoId.git",
-            ssh = "git@gitserver.local:$repoId.git",
-            zip = "$s3EndPoint/$bucketName/repos/$repoId/archive.zip"
+            https = "$gitBaseUrl/$ownerId/$repoName.git",
+            ssh = "git@git.yourdomain:$ownerId/$repoName.git",
+            zip = "$gitBaseUrl/$ownerId/$repoName/archive.zip"
         )
     }
 
+    /**
+     * 지정된 브랜치의 HEAD 커밋 해시를 반환합니다.
+     * @param repository 대상 저장소
+     * @param branchName 브랜치 이름
+     * @return HEAD 커밋 해시
+     */
     override fun getHeadCommitHash(repository: Repository, branchName: String): String {
         val ownerId = repository.owner.id.toString()
         val repoName = repository.name
-        val bareRepoPath = Paths.get(bareRootPath, ownerId, repoName)
+        val bareRepoPath = Paths.get(bareRootPath, ownerId, "$repoName.git")
         Git.open(bareRepoPath.toFile()).use { git ->
             val ref = git.repository.exactRef("refs/heads/$branchName")
                 ?: throw IllegalStateException("브랜치 '$branchName'에 대한 참조가 없습니다.")
@@ -175,6 +187,11 @@ class JGitService(
         }
     }
 
+    /**
+     * .gitignore 템플릿을 반환합니다.
+     * @param language 언어 이름
+     * @return .gitignore 템플릿 내용
+     */
     private fun getGitignoreTemplate(language: String): String {
         return when (language.lowercase()) {
             "java" -> "*.class\n*.log\ntarget/\n.idea/\n"
@@ -184,6 +201,12 @@ class JGitService(
         }
     }
 
+    /**
+     * 라이선스 템플릿을 반환합니다.
+     * @param type 라이선스 종류 (예: MIT, Apache-2.0)
+     * @param author 저자 이름
+     * @return 라이선스 템플릿 내용
+     */
     private fun getLicenseTemplate(type: String, author: String): String {
         val year = java.time.Year.now().value
         return when (type.uppercase()) {

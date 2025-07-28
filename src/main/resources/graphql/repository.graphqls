@@ -2,6 +2,50 @@ scalar Long
 
 type Query {
     repository(id: Long!, branch: String): RepositoryResponse!
+    myRepositories(
+        page: Int = 1,
+        size: Int = 10,
+        sortBy: RepositorySortBy = lastUpdatedAt,
+        sortDirection: SortDirection = DESC,
+        keyword: String
+    ): MyRepositoriesResult!
+}
+
+type MyRepositoriesResult {
+    profile: RepositoryUserResponse!
+    repositories: RepositoryListPageResponse!
+}
+
+type RepositoryListPageResponse {
+    content: [RepositoryListItem!]!
+    page: Int!
+    size: Int!
+    totalElements: Int!
+    totalPages: Int!
+    hasNext: Boolean!
+}
+
+type RepositoryListItem {
+    id: Long!
+    name: String!
+    description: String
+    visibility: String!
+    lastUpdatedAt: String
+    isOwner: Boolean!
+    isBookmarked: Boolean!
+    isInvited: Boolean!
+    ownerInfo: RepositoryUserResponse
+    language: String
+}
+
+enum RepositorySortBy {
+    lastUpdatedAt
+    name
+}
+
+enum SortDirection {
+    ASC
+    DESC
 }
 
 type RepositoryResponse {
@@ -31,6 +75,8 @@ type TreeNodeResponse {
     path: String!
     isDirectory: Boolean!
     size: Long
+    lastCommitMessage: String
+    lastCommittedAt: String
 }
 
 type RepositoryUserResponse {
@@ -41,6 +87,7 @@ type RepositoryUserResponse {
 
 type LanguageStatResponse {
     extension: String!
+    language: String!
     count: Int!
     ratio: Float!
 }

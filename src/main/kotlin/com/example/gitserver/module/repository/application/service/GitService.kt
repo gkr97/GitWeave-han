@@ -11,6 +11,6 @@ interface GitService {
         licenseTemplate: String?
     )
     fun deleteGitDirectories(repository: Repository)
-    fun getCloneUrls(repoId: Long): CloneUrlsResponse
+    fun getCloneUrls(repository: Repository): CloneUrlsResponse
     fun getHeadCommitHash(repository: Repository, branchName: String): String?
 }

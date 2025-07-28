@@ -15,16 +15,18 @@ class TreeQueryRepository(
     private val log = KotlinLogging.logger {}
 
     fun getFileTreeAtRoot(repoId: Long, commitHash: String): List<TreeNodeResponse> {
-        val prefix = "TREE#$commitHash#"
+        val treePrefix = "TREE#$commitHash#"
 
         return try {
+            val commitItem = getCommitItem(repoId, commitHash)
+
             val response = dynamoDbClient.query {
                 it.tableName(tableName)
                     .keyConditionExpression("PK = :pk AND begins_with(SK, :skPrefix)")
                     .expressionAttributeValues(
                         mapOf(
                             ":pk" to AttributeValue.fromS("REPO#$repoId"),
-                            ":skPrefix" to AttributeValue.fromS(prefix)
+                            ":skPrefix" to AttributeValue.fromS(treePrefix)
                         )
                     )
             }
@@ -39,12 +41,32 @@ class TreeQueryRepository(
                         name = item["name"]?.s() ?: return@mapNotNull null,
                         path = path,
                         isDirectory = item["is_directory"]?.bool() ?: false,
-                        size = item["size"]?.n()?.toLongOrNull()
+                        size = item["size"]?.n()?.toLongOrNull(),
+                        lastCommitMessage = commitItem?.get("message")?.s(),
+                        lastCommittedAt = commitItem?.get("committed_at")?.s()
                     )
                 }
         } catch (e: Exception) {
             log.error(e) { "[getFileTreeAtRoot] DynamoDB 조회 실패 - repoId=$repoId, commitHash=$commitHash" }
             emptyList()
+        }
+    }
+
+    private fun getCommitItem(repoId: Long, commitHash: String): Map<String, AttributeValue>? {
+        return try {
+            val result = dynamoDbClient.getItem {
+                it.tableName(tableName)
+                    .key(
+                        mapOf(
+                            "PK" to AttributeValue.fromS("REPO#$repoId"),
+                            "SK" to AttributeValue.fromS("COMMIT#$commitHash")
+                        )
+                    )
+            }
+            if (result.hasItem()) result.item() else null
+        } catch (e: Exception) {
+            log.error(e) { "[getCommitItem] DynamoDB 조회 실패 - repoId=$repoId, commitHash=$commitHash" }
+            null
         }
     }
 }

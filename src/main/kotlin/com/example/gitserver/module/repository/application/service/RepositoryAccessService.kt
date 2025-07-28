@@ -1,0 +1,73 @@
+package com.example.gitserver.module.repository.application.service
+
+import com.example.gitserver.module.common.service.CommonCodeCacheService
+import com.example.gitserver.module.repository.infrastructure.persistence.CollaboratorRepository
+import com.example.gitserver.module.repository.infrastructure.persistence.RepositoryRepository
+import com.example.gitserver.module.user.application.service.JwtService
+import com.example.gitserver.module.user.application.service.PatService
+import org.springframework.stereotype.Service
+
+private val log = mu.KotlinLogging.logger { }
+
+@Service
+class RepositoryAccessService(
+    private val repoRepository: RepositoryRepository,
+    private val collaboratorRepository: CollaboratorRepository,
+    private val patService: PatService,
+    private val jwtService: JwtService,
+    private val commonCodeCacheService: CommonCodeCacheService,
+) {
+    /**
+     * 인증 및 권한 체크 로직만 집중
+     */
+    fun checkAccess(
+        repoName: String,
+        ownerId: Long,
+        authorization: String?
+    ): AccessResult {
+        log.info("Check access: repoName={}, ownerId={}, authHeader={}", repoName, ownerId, authorization != null)
+
+        val repo = repoRepository.findByOwnerIdAndName(ownerId, repoName)
+            ?: run {
+                log.warn("Repository not found: ownerId={}, repoName={}", ownerId, repoName)
+                return AccessResult.NotFound
+            }
+
+        val visibilityCode = commonCodeCacheService.getCodeDetailsOrLoad("VISIBILITY")
+            .firstOrNull { it.code == "public" }?.id
+            ?: run {
+                log.error("Visibility code for 'public' not found")
+                return AccessResult.NotFound
+            }
+
+        if (repo.visibilityCodeId == visibilityCode) {
+            log.info("Public repo. Access granted: ownerId={}, repoName={}", ownerId, repoName)
+            return AccessResult.Authorized(null)
+        }
+
+        val userId = patService.resolveUserIdByAuthHeader(authorization)
+            ?: jwtService.resolveUserIdByBearer(authorization)
+            ?: run {
+                log.warn("Unauthorized: No valid userId found (authHeader={})", authorization != null)
+                return AccessResult.Unauthorized
+            }
+
+        if (repo.owner.id == userId) {
+            log.info("Repo owner access granted. ownerId={}, repoName={}", ownerId, repoName)
+            return AccessResult.Authorized(userId)
+        }
+        if (collaboratorRepository.existsByRepositoryIdAndUserIdAndAcceptedTrue(repo.id, userId)) {
+            log.info("Collaborator access granted. userId={}, repoId={}", userId, repo.id)
+            return AccessResult.Authorized(userId)
+        }
+        log.warn("Forbidden: userId={} for repoId={}", userId, repo.id)
+        return AccessResult.Forbidden
+    }
+
+    sealed class AccessResult {
+        data class Authorized(val userId: Long?) : AccessResult()
+        data object NotFound : AccessResult()
+        data object Unauthorized : AccessResult()
+        data object Forbidden : AccessResult()
+    }
+}

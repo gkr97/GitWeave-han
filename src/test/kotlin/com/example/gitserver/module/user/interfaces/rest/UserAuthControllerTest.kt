@@ -1,6 +1,7 @@
 package com.example.gitserver.module.user.interfaces.rest
 
 
+import com.example.gitserver.common.jwt.GitPatAuthenticationFilter
 import com.example.gitserver.common.jwt.JwtAuthenticationFilter
 import com.example.gitserver.common.jwt.JwtProvider
 import com.example.gitserver.fixture.UserFixture
@@ -37,7 +38,10 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
 @WebMvcTest(
     controllers = [UserAuthController::class],
     excludeFilters = [
-        ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = [JwtAuthenticationFilter::class])
+        ComponentScan.Filter(
+            type = FilterType.ASSIGNABLE_TYPE,
+            classes = [JwtAuthenticationFilter::class, GitPatAuthenticationFilter::class]
+        )
     ]
 )
 @AutoConfigureMockMvc(addFilters = false)
@@ -80,7 +84,8 @@ class UserAuthControllerTest(
                     requestFields(
                         fieldWithPath("email").description("회원가입 이메일"),
                         fieldWithPath("password").description("비밀번호"),
-                        fieldWithPath("name").description("유저 이름").optional()
+                        fieldWithPath("name").description("유저 이름").optional(),
+                        fieldWithPath("providerCode").description("가입 제공자 코드  local, kakao")
                     ),
                     responseFields(
                         fieldWithPath("success").description("요청 성공 여부"),

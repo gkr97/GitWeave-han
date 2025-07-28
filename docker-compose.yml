@@ -48,6 +48,17 @@ services:
       - github_localstack_data:/var/lib/localstack
       - /var/run/docker.sock:/var/run/docker.sock
 
+  nginx:
+    image: nginx:latest
+    container_name: github-nginx
+    restart: unless-stopped
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - /tmp/git:/data/git
+    ports:
+      - "8090:80"
+
+
 volumes:
   github_mysql_data:
   github_redis_data:

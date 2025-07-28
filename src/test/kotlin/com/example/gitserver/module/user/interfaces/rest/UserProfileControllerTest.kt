@@ -1,5 +1,6 @@
 package com.example.gitserver.module.user.interfaces.rest
 
+import com.example.gitserver.common.jwt.GitPatAuthenticationFilter
 import com.example.gitserver.common.jwt.JwtAuthenticationFilter
 import com.example.gitserver.fixture.UserFixture
 import com.example.gitserver.module.user.application.service.UserProfileCommandService
@@ -28,9 +29,13 @@ import org.springframework.restdocs.operation.preprocess.Preprocessors.*
 import org.springframework.restdocs.payload.PayloadDocumentation.*
 import org.springframework.restdocs.request.RequestDocumentation.*
 
-@WebMvcTest(controllers = [UserProfileController::class],
-        excludeFilters = [
-            ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = [JwtAuthenticationFilter::class])
+@WebMvcTest(
+    controllers = [UserProfileController::class],
+    excludeFilters = [
+        ComponentScan.Filter(
+            type = FilterType.ASSIGNABLE_TYPE,
+            classes = [JwtAuthenticationFilter::class, GitPatAuthenticationFilter::class]
+        )
     ]
 )
 @AutoConfigureMockMvc(addFilters = false)
@@ -68,6 +73,7 @@ class UserProfileControllerTest @Autowired constructor(
                         fieldWithPath("data.id").description("유저 ID"),
                         fieldWithPath("data.email").description("유저 이메일"),
                         fieldWithPath("data.name").description("유저 이름"),
+                        fieldWithPath("data.profileImageUrl").description("프로필 이미지 URL"),
                         fieldWithPath("timestamp").description("응답 시간(UTC)")
                     )
                 )

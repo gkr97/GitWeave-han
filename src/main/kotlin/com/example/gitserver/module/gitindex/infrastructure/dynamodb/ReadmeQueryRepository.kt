@@ -37,24 +37,4 @@ class ReadmeQueryRepository(
             }
             .firstOrNull()
     }
-
-    fun countBlobsByExtension(repoId: Long): Map<String, Int> {
-        val response = dynamoDbClient.query {
-            it.tableName(tableName)
-                .keyConditionExpression("PK = :pk and begins_with(SK, :skPrefix)")
-                .expressionAttributeValues(
-                    mapOf(
-                        ":pk" to AttributeValue.fromS("REPO#$repoId"),
-                        ":skPrefix" to AttributeValue.fromS("BLOB#")
-                    )
-                )
-        }
-
-        val result = mutableMapOf<String, Int>()
-        response.items().forEach {
-            val ext = it["extension"]?.s()?.lowercase()?.takeIf { it.isNotBlank() } ?: return@forEach
-            result[ext] = result.getOrDefault(ext, 0) + 1
-        }
-        return result
-    }
 }

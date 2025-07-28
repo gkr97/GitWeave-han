@@ -230,3 +230,29 @@ CREATE TABLE `pull_request_file_diff` (
                                           KEY `idx_pr_file_diff_pull_request_id` (`pull_request_id`),
                                           CONSTRAINT `fk_pr_file_diff_pull_request_id` FOREIGN KEY (`pull_request_id`) REFERENCES `pull_request` (`id`)
 ) COMMENT='PR 파일 Diff';
+
+CREATE TABLE `personal_access_token` (
+                                         `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT 'PK',
+                                         `user_id` BIGINT NOT NULL COMMENT '유저 PK',
+                                         `token_hash` VARCHAR(64) NOT NULL COMMENT 'SHA-256 토큰 해시',
+                                         `name` VARCHAR(100) NULL COMMENT '토큰 별칭(설명용)',
+                                         `last_used_at` DATETIME NULL COMMENT '최근 사용 시각',
+                                         `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각',
+                                         `expires_at` DATETIME NULL COMMENT '만료 시각(Null=영구)',
+                                         `is_active` BOOLEAN NOT NULL DEFAULT 1 COMMENT '활성 여부(비활성시 로그인불가)',
+                                         PRIMARY KEY (`id`),
+                                         KEY `idx_pat_user_id` (`user_id`),
+                                         CONSTRAINT `fk_pat_user_id` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`)
+) COMMENT='개인 접근 토큰(PAT)';
+
+CREATE TABLE `personal_access_token_usage` (
+                                               `id` BIGINT NOT NULL AUTO_INCREMENT,
+                                               `token_id` BIGINT NOT NULL,
+                                               `used_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                                               `ip_address` VARCHAR(50) NULL,
+                                               `user_agent` VARCHAR(255) NULL,
+                                               `success` BOOLEAN NOT NULL DEFAULT 1,
+                                               PRIMARY KEY (`id`),
+                                               KEY `idx_pat_usage_token_id` (`token_id`),
+                                               CONSTRAINT `fk_pat_usage_token_id` FOREIGN KEY (`token_id`) REFERENCES `personal_access_token` (`id`)
+) COMMENT='PAT 사용 이력';

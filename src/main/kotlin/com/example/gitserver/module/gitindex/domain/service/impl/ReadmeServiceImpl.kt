@@ -6,6 +6,7 @@ import com.example.gitserver.module.gitindex.domain.service.ReadmeService
 import com.example.gitserver.module.gitindex.exception.ReadmeLoadFailedException
 import com.example.gitserver.module.gitindex.exception.ReadmeNotFoundException
 import com.example.gitserver.module.gitindex.exception.ReadmeRenderException
+import com.example.gitserver.module.gitindex.infrastructure.dynamodb.BlobQueryRepository
 import com.example.gitserver.module.repository.interfaces.dto.LanguageStatResponse
 import com.example.gitserver.module.repository.interfaces.dto.ReadmeResponse
 import mu.KotlinLogging
@@ -16,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional
 
 @Service
 class ReadmeServiceImpl(
+    private val blobQueryRepository: BlobQueryRepository,
     private val readmeQueryRepository: ReadmeQueryRepository,
     private val blobReader: S3BlobStorageReader
 ) : ReadmeService {
@@ -56,16 +58,27 @@ class ReadmeServiceImpl(
 
     @Transactional(readOnly = true)
     override fun getLanguageStats(repositoryId: Long): List<LanguageStatResponse> {
-        val counts = readmeQueryRepository.countBlobsByExtension(repositoryId)
+        val counts = blobQueryRepository.countBlobsByExtension(repositoryId)
         val total = counts.values.sum().takeIf { it > 0 } ?: return emptyList()
 
-        return counts.map { (ext, count) ->
+        val extToLang = mapOf(
+            "kt" to "Kotlin",
+            "java" to "Java",
+            "md" to "Markdown",
+            "sh" to "Shell",
+            "py" to "Python"
+        )
+
+        return counts.mapNotNull { (ext, count) ->
+            val lang = extToLang[ext] ?: return@mapNotNull null
             LanguageStatResponse(
                 extension = ext,
+                language = lang,
                 count = count,
                 ratio = count.toFloat() / total
             )
-        }
+        }.sortedByDescending { it.ratio }
     }
+
 }
 

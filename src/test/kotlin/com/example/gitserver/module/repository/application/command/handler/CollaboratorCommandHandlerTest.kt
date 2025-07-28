@@ -93,7 +93,7 @@ class CollaboratorCommandHandlerTest {
     }
 
     @Test
-    fun `이미 등록된 collaborator이면 실패`() {
+    fun `이미 등록된 콜라버레이터면 실패`() {
         whenever(repositoryRepository.findById(100L)).thenReturn(Optional.of(repository))
         whenever(collaboratorRepository.existsByRepositoryIdAndUserId(100L, 2L)).thenReturn(true)
 
@@ -137,7 +137,7 @@ class CollaboratorCommandHandlerTest {
     }
 
     @Test
-    fun `초대 거절 시 collaborator 삭제`() {
+    fun `초대 거절 시 콜라버레이터 삭제`() {
         val collaborator = Collaborator(
             repository = repository,
             user = invitee,

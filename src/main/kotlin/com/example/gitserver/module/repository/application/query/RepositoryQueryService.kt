@@ -9,8 +9,12 @@ import com.example.gitserver.module.repository.exception.RepositoryAccessDeniedE
 import com.example.gitserver.module.repository.exception.RepositoryNotFoundException
 import com.example.gitserver.module.repository.infrastructure.persistence.*
 import com.example.gitserver.module.repository.interfaces.dto.*
+import com.example.gitserver.module.user.exception.UserNotFoundException
 import com.example.gitserver.module.user.infrastructure.persistence.UserRepository
 import mu.KotlinLogging
+import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Pageable
+import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.util.concurrent.StructuredTaskScope
@@ -32,6 +36,123 @@ class RepositoryQueryService(
     private val userRepository: UserRepository,
 ) {
 
+    /**
+     * 사용자 소속 저장소 목록을 조회합니다.
+     * - 본인이 소유한 저장소
+     * - 초대받은 저장소
+     * - 북마크한 저장소
+     *
+     * @param userId 사용자 ID
+     * @param request 페이지네이션 및 정렬 요청 정보
+     * @return 사용자 소속 저장소 목록
+     */
+    @Transactional(readOnly = true)
+    fun getRepositoryList(
+        userId: Long,
+        request: RepositoryListRequest
+    ): MyRepositoriesResult {
+        log.info { "[getRepositoryList] userId=$userId, request=$request 시작" }
+
+        val sortProperty = when (request.sortBy) {
+            "lastUpdatedAt", "updatedAt" -> "updatedAt"
+            "name" -> "name"
+            else -> "updatedAt"
+        }
+        val direction = if (request.sortDirection.equals("ASC", true)) Sort.Direction.ASC else Sort.Direction.DESC
+        val pageable = PageRequest.of(request.page - 1, request.size, direction, sortProperty)
+        log.debug { "[getRepositoryList] sortProperty=$sortProperty, direction=$direction, pageable=$pageable" }
+
+        val ownIds = repositoryRepository.findByOwnerId(userId, Pageable.unpaged()).map { it.id }
+        log.debug { "[getRepositoryList] ownIds(size=${ownIds.size})=$ownIds" }
+
+        val invitedIds = collaboratorRepository.findAcceptedByUserId(userId).map { it.repository.id }
+        log.debug { "[getRepositoryList] invitedIds(size=${invitedIds.size})=$invitedIds" }
+
+        val bookmarkedIds = bookmarkRepository.findByUserId(userId).map { it.repository.id }
+        log.debug { "[getRepositoryList] bookmarkedIds(size=${bookmarkedIds.size})=$bookmarkedIds" }
+
+        val invitedSet = invitedIds.toSet()
+        val filteredBookmarkedIds = repositoryRepository.findAllById(bookmarkedIds)
+            .filter { repo ->
+                val isPublic = commonCodeCacheService.getCodeDetailsOrLoad("VISIBILITY")
+                    .firstOrNull { it.id == repo.visibilityCodeId }?.code == "PUBLIC"
+                isPublic || invitedSet.contains(repo.id)
+            }
+            .map { it.id }
+        log.debug { "[getRepositoryList] filteredBookmarkedIds(size=${filteredBookmarkedIds.size})=$filteredBookmarkedIds" }
+
+        val allIds = (ownIds + invitedIds + filteredBookmarkedIds).distinct()
+        log.info { "[getRepositoryList] allIds(size=${allIds.size})=$allIds" }
+        val page = if (!request.keyword.isNullOrBlank()) {
+            repositoryRepository.findByIdInWithKeyword(allIds, request.keyword, pageable)
+        } else {
+            repositoryRepository.findByIdIn(allIds, pageable)
+        }
+        log.info { "[getRepositoryList] page number=${page.number + 1}, page size=${page.size}, totalElements=${page.totalElements}, totalPages=${page.totalPages}, contentSize=${page.content.size}" }
+
+        val invitedSetFinal = invitedIds.toSet()
+        val bookmarkedSetFinal = filteredBookmarkedIds.toSet()
+        val ownSetFinal = ownIds.toSet()
+
+        val content = page.content.map { repo ->
+            val isOwner = ownSetFinal.contains(repo.id)
+            val isBookmarked = bookmarkedSetFinal.contains(repo.id)
+            val isInvited = invitedSetFinal.contains(repo.id)
+            val visibility = commonCodeCacheService.getCodeDetailsOrLoad("VISIBILITY")
+                .firstOrNull { it.id == repo.visibilityCodeId }?.code ?: "unknown"
+            RepositoryListItem(
+                id = repo.id,
+                name = repo.name,
+                description = repo.description,
+                visibility = visibility,
+                lastUpdatedAt = repo.updatedAt.toString(),
+                isOwner = isOwner,
+                isBookmarked = isBookmarked,
+                isInvited = isInvited,
+                language = repo.language,
+                ownerInfo = if (!isOwner) {
+                    RepositoryUserResponse(
+                        userId = repo.owner.id,
+                        nickname = repo.owner.name ?: "이름 없음",
+                        profileImageUrl = repo.owner.profileImageUrl
+                    )
+                } else null
+            )
+        }
+
+        log.info { "[getRepositoryList] 최종 반환 content size=${content.size}" }
+
+        val user = userRepository.findById(userId).orElseThrow { UserNotFoundException(userId) }
+        val profile = RepositoryUserResponse(
+            userId = user.id,
+            nickname = user.name ?: "",
+            profileImageUrl = user.profileImageUrl
+        )
+
+        return MyRepositoriesResult(
+            profile = profile,
+            repositories = RepositoryListPageResponse(
+                content = content,
+                page = request.page,
+                size = request.size,
+                totalElements = page.totalElements,
+                totalPages = page.totalPages,
+                hasNext = page.hasNext()
+            )
+        )
+
+    }
+
+
+    /**
+     * 저장소 상세 정보를 조회합니다.
+     * - 저장소 소유자, 협업자, 북마크 여부 등 포함
+     *
+     * @param repoId 저장소 ID
+     * @param branch 조회할 브랜치 이름 (기본값: null -> default 브랜치)
+     * @param currentUserId 현재 사용자 ID (권한 체크용)
+     * @return 저장소 상세 정보
+     */
     @Transactional(readOnly = true)
     fun getRepository(repoId: Long, branch: String? = null, currentUserId: Long?): RepoDetailResponse {
         log.info { "[getRepository] repoId=$repoId, branch=${branch ?: "default"} 시작" }
@@ -107,7 +228,7 @@ class RepositoryQueryService(
 
             val cloneUrlsFork = scope.fork {
                 log.debug { "[Scope] cloneUrls 시작" }
-                gitService.getCloneUrls(repoId)
+                gitService.getCloneUrls(repo)
             }
 
             scope.join()
