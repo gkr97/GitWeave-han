@@ -18,6 +18,12 @@ class EmailVerificationListener(
 ) {
     private val log = KotlinLogging.logger {}
 
+    /**
+     * SQS에서 이메일 인증 메시지를 주기적으로 폴링하여 처리합니다.
+     * - 메시지를 받아와서 JSON으로 파싱합니다.
+     * - 이메일을 발송하고 성공 시 메시지를 삭제합니다.
+     * - 실패 시 에러 로그를 기록합니다.
+     */
     @Scheduled(fixedDelay = 2000)
     fun pollSqs() {
         val response = sqsClient.receiveMessage { it.queueUrl(queueUrl).maxNumberOfMessages(10) }

@@ -18,7 +18,11 @@ class RepositoryAccessService(
     private val commonCodeCacheService: CommonCodeCacheService,
 ) {
     /**
-     * 인증 및 권한 체크 로직만 집중
+     * 인증 및 권한 체크 로직
+     * 이 메서드는 저장소 접근 권한을 확인합니다.
+     * - 저장소가 존재하지 않으면 NotFound 반환
+     * - 저장소가 공개(public)인 경우 Authorized 반환
+     * - 인증 헤더가 없거나 유효하지 않은 경우 Unauthorized 반환
      */
     fun checkAccess(
         repoName: String,

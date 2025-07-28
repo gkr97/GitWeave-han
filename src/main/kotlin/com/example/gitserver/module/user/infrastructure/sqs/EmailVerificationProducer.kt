@@ -13,6 +13,11 @@ class EmailVerificationProducer(
     private val objectMapper: ObjectMapper,
     @Value("\${mail.sqs.queue-url}") private val queueUrl: String
 ) {
+    /**
+     * 이메일 인증 메시지를 SQS 큐에 전송합니다.
+     *
+     * @param message 이메일 인증 메시지 객체
+     */
     fun sendVerificationMailMessage(message: EmailVerificationMessage) {
         val req = SendMessageRequest.builder()
             .queueUrl(queueUrl)

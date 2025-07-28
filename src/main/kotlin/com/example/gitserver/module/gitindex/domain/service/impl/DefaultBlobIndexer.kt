@@ -28,6 +28,15 @@ class DefaultBlobIndexer(
     private val userRepository: UserRepository,
 ) : BlobIndexer {
 
+    /**
+     * 지정된 Git 저장소를 인덱싱합니다.
+     * @param repositoryId 인덱싱할 저장소의 ID
+     * @param workDir Git 저장소의 작업 디렉토리 경로
+     * @throws GitRepositoryOpenException Git 저장소를 열 수 없는 경우
+     * @throws GitHeadNotFoundException HEAD 참조를 찾을 수 없는 경우
+     * @throws GitCommitParseException 커밋 파싱 중 오류가 발생한 경우
+     * @throws AuthorNotFoundException 커밋 작성자의 이메일로 사용자를 찾을 수 없는 경우
+     */
     override fun indexRepository(repositoryId: Long, workDir: Path) {
         log.info { "[indexRepository] 시작 - repositoryId=$repositoryId, workDir=$workDir" }
 

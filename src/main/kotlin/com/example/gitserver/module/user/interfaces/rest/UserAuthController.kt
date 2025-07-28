@@ -34,6 +34,11 @@ class UserAuthController(
     private val authQueryService: AuthQueryService,
     private val jwtProvider: JwtProvider,
 ) {
+
+    /**
+     * 사용자 인증 관련 API를 처리하는 컨트롤러입니다.
+     * 회원가입, 로그인, 이메일 인증, 토큰 갱신 등을 포함합니다.
+     */
     @Operation(summary = "Register User")
     @PostMapping("/register")
     fun registerUser(@Valid @RequestBody command: RegisterUserCommand): ResponseEntity<ApiResponse<UserResponse>> {
@@ -44,6 +49,10 @@ class UserAuthController(
             .body(success(HttpStatus.CREATED.value(), "회원가입 성공", UserResponse.from(user)))
     }
 
+    /**
+     * 이메일 인증을 위한 API입니다.
+     * 사용자가 이메일 인증 링크를 클릭하면 이 엔드포인트가 호출되어 토큰을 검증합니다.
+     */
     @Operation(summary = "email verification")
     @GetMapping("/email-verify")
     fun verifyEmail(@RequestParam token: String): ResponseEntity<ApiResponse<String>> {
@@ -51,6 +60,10 @@ class UserAuthController(
         return ResponseEntity.ok(success(200, "이메일 인증 완료"))
     }
 
+    /**
+     * 사용자 로그인 API입니다.
+     * 이메일과 비밀번호를 사용하여 로그인하고, JWT 토큰을 발급합니다.
+     */
     @Operation(summary = "Login User")
     @PostMapping("/login")
     fun login(
@@ -70,6 +83,10 @@ class UserAuthController(
         return ResponseEntity.ok(success(200, "로그인 성공", response))
     }
 
+    /**
+     * 토큰 재발급 API입니다.
+     * 기존의 accessToken과 refreshToken을 사용하여 새로운 토큰을 발급합니다.
+     */
     @PostMapping("/refresh")
     fun refresh(@RequestBody request: RefreshRequest): ResponseEntity<ApiResponse<LoginResponse>> {
         val userId = jwtProvider.getUserId(request.accessToken)
@@ -79,6 +96,10 @@ class UserAuthController(
         return ResponseEntity.ok(success(200, "토큰 재발급 성공", response))
     }
 
+    /**
+     * 로그아웃 API입니다.
+     * 사용자가 로그아웃할 때 호출되어, 해당 사용자의 세션을 종료합니다.
+     */
     @Operation(summary = "Logout User")
     @PostMapping("/logout")
     fun logout(

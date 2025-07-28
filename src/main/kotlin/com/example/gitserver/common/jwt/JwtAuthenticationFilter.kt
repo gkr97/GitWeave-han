@@ -12,6 +12,10 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.stereotype.Component
 import org.springframework.web.filter.OncePerRequestFilter
 
+/**
+ * JwtAuthenticationFilter는 JWT 토큰을 검증하고, 유효한 경우 사용자 인증 정보를 SecurityContext에 설정
+ * 이 필터는 요청이 들어올 때마다 실행됩니다.
+ */
 @Order(2)
 @Component
 class JwtAuthenticationFilter(

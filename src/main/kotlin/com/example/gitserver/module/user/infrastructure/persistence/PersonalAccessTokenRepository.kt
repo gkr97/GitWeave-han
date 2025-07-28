@@ -1,6 +1,6 @@
 package com.example.gitserver.module.user.infrastructure.persistence
 
-import com.example.gitserver.module.user.PersonalAccessToken
+import com.example.gitserver.module.user.domain.PersonalAccessToken
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 

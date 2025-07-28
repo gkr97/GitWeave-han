@@ -5,7 +5,6 @@ import com.example.gitserver.module.user.application.service.UserProfileCommandS
 import com.example.gitserver.module.user.domain.CustomUserDetails
 import com.example.gitserver.module.user.interfaces.rest.dto.UpdateNameRequest
 import com.example.gitserver.module.user.interfaces.rest.dto.UserProfileResponse
-import com.example.gitserver.module.user.interfaces.rest.dto.UserResponse
 import io.swagger.v3.oas.annotations.Operation
 import jakarta.validation.Valid
 import org.springframework.security.core.annotation.AuthenticationPrincipal
@@ -30,6 +29,10 @@ class UserProfileController(
         return ApiResponse.success(200, "내 프로필 조회", UserProfileResponse.from(user))
     }
 
+    /**
+     * 내 프로필 정보 수정
+     */
+    @Operation(summary = "Update my profile")
     @PatchMapping("/me/name")
     fun updateMyName(
         @AuthenticationPrincipal userDetails: CustomUserDetails,
@@ -40,6 +43,10 @@ class UserProfileController(
         return ApiResponse.success(200, "이름 변경 완료", request.name)
     }
 
+    /**
+     * 내 프로필 이미지 업로드
+     */
+    @Operation (summary = "Upload my profile image")
     @PostMapping("/me/image", consumes = ["multipart/form-data"])
     fun uploadMyProfileImage(
         @AuthenticationPrincipal userDetails: CustomUserDetails,

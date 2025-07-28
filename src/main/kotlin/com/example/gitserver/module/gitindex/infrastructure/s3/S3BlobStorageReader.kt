@@ -14,6 +14,12 @@ class S3BlobStorageReader(
 ) {
     private val log = KotlinLogging.logger {}
 
+    /**
+     * S3에서 블롭을 읽어 문자열로 반환합니다.
+     * @param repoId 레포지토리 ID
+     * @param blobHash 블롭 해시
+     * @return 블롭의 내용 문자열, 실패 시 null
+     */
     fun readBlobAsString(repoId: Long, blobHash: String): String? {
         val key = "blobs/$repoId/$blobHash"
         return try {

@@ -108,6 +108,9 @@ class GitController(
         }
     }
 
+    /**
+     * Git HTTP 백엔드 환경 변수를 빌드합니다.
+     */
     private fun buildGitBackendEnv(
         request: HttpServletRequest,
         ownerId: Long,

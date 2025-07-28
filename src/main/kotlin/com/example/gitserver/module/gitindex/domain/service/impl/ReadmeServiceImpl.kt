@@ -24,6 +24,12 @@ class ReadmeServiceImpl(
 
     private val log = KotlinLogging.logger {}
 
+    /**
+     * README 파일의 존재 여부와 경로, blob 해시를 반환합니다.
+     * @param repoId 레포지토리 ID
+     * @param commitHash 커밋 해시
+     * @return ReadmeResponse 객체
+     */
     @Transactional(readOnly = true)
     override fun getReadmeInfo(repoId: Long, commitHash: String): ReadmeResponse {
         val result = readmeQueryRepository.findReadmeBlobInfo(repoId, commitHash)
@@ -34,6 +40,14 @@ class ReadmeServiceImpl(
         )
     }
 
+    /**
+     * README 파일의 내용을 반환합니다.
+     * @param repoId 레포지토리 ID
+     * @param commitHash 커밋 해시
+     * @return README 파일의 내용
+     * @throws ReadmeNotFoundException README 파일이 존재하지 않을 경우
+     * @throws ReadmeLoadFailedException S3에서 블롭을 읽는 데 실패한 경우
+     */
     @Transactional(readOnly = true)
     override fun getReadmeContent(repoId: Long, commitHash: String): String {
         val blobHash = getReadmeInfo(repoId, commitHash).blobHash
@@ -43,6 +57,13 @@ class ReadmeServiceImpl(
             ?: throw ReadmeLoadFailedException("blobs/$repoId/$blobHash", Exception("null body"))
     }
 
+    /**
+     * README 파일의 HTML 렌더링 결과를 반환합니다.
+     * @param repoId 레포지토리 ID
+     * @param commitHash 커밋 해시
+     * @return HTML로 렌더링된 README 내용
+     * @throws ReadmeRenderException 마크다운 렌더링 중 오류가 발생한 경우
+     */
     @Transactional(readOnly = true)
     override fun getReadmeHtml(repoId: Long, commitHash: String): String {
         val content = getReadmeContent(repoId, commitHash)
@@ -56,6 +77,11 @@ class ReadmeServiceImpl(
         }
     }
 
+    /**
+     * 레포지토리의 언어 통계 정보를 반환합니다.
+     * @param repositoryId 레포지토리 ID
+     * @return 언어 통계 리스트
+     */
     @Transactional(readOnly = true)
     override fun getLanguageStats(repositoryId: Long): List<LanguageStatResponse> {
         val counts = blobQueryRepository.countBlobsByExtension(repositoryId)

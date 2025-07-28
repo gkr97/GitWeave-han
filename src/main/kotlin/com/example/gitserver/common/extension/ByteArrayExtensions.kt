@@ -4,6 +4,7 @@ import org.apache.tika.Tika
 
 val tika = Tika()
 
+
 fun ByteArray.isBinaryFile(threshold: Int = 8000): Boolean {
     val slice = if (this.size > threshold) this.sliceArray(0 until threshold) else this
     return slice.any { it == 0.toByte() }

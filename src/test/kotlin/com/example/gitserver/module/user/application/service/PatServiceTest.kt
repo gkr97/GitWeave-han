@@ -1,4 +1,4 @@
-import com.example.gitserver.module.user.PersonalAccessToken
+import com.example.gitserver.module.user.domain.PersonalAccessToken
 import com.example.gitserver.module.user.application.service.PatService
 import com.example.gitserver.module.user.domain.User
 import com.example.gitserver.module.user.exception.UserNotFoundException

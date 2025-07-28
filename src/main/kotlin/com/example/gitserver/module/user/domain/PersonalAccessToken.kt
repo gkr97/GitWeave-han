@@ -1,4 +1,4 @@
-package com.example.gitserver.module.user
+package com.example.gitserver.module.user.domain
 
 import jakarta.persistence.*
 import java.time.LocalDateTime

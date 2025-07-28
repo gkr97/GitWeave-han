@@ -26,6 +26,10 @@ class GitPatAuthenticationFilter(
 
     private val log = KLogging().logger
 
+    /**
+     * Git 저장소 접근을 위한 Personal Access Token(PAT) 인증 필터
+     * 요청 URI가 git 저장소 경로인 경우 PAT 인증을 수행합니다.
+     */
     override fun doFilterInternal(request: HttpServletRequest, response: HttpServletResponse, chain: FilterChain) {
         val uri = request.requestURI
         log.debug("요청 URI: {}", uri)

@@ -13,6 +13,14 @@ import io.swagger.v3.oas.annotations.Operation
 class PatController(
     private val patService: PatService
 ) {
+
+    /**
+     * Git Personal Access Token (PAT)을 발급합니다.
+     *
+     * @param user 인증된 사용자 정보
+     * @param description PAT 설명 (선택적)
+     * @return 발급된 PAT
+     */
     @Operation(summary = "Git Personal Access Token (PAT) 발급")
     @PostMapping("/issue")
     fun issuePat(
@@ -24,6 +32,12 @@ class PatController(
         return mapOf("pat" to rawToken)
     }
 
+    /**
+     * Git Personal Access Token (PAT)을 조회합니다.
+     *
+     * @param user 인증된 사용자 정보
+     * @return 활성화된 PAT 목록
+     */
     @Operation(summary = "Git Personal Access Token (PAT) 조회")
     @PostMapping("/revoke/{patId}")
     fun revokePat(
