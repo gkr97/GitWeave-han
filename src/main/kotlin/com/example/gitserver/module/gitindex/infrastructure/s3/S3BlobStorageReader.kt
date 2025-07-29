@@ -16,12 +16,11 @@ class S3BlobStorageReader(
 
     /**
      * S3에서 블롭을 읽어 문자열로 반환합니다.
-     * @param repoId 레포지토리 ID
      * @param blobHash 블롭 해시
      * @return 블롭의 내용 문자열, 실패 시 null
      */
-    fun readBlobAsString(repoId: Long, blobHash: String): String? {
-        val key = "blobs/$repoId/$blobHash"
+    fun readBlobAsString(blobHash: String): String? {
+        val key = "blobs/$blobHash"
         return try {
             val response = s3Client.getObject(
                 GetObjectRequest.builder()
@@ -29,11 +28,14 @@ class S3BlobStorageReader(
                     .key(key)
                     .build()
             )
-            response.readAllBytes().toString(StandardCharsets.UTF_8)
+            val result = response.readAllBytes().toString(StandardCharsets.UTF_8)
+            log.info { "[S3BlobStorageReader] Blob 읽기 성공 - hash=$blobHash, key=$key" }
+            result
         } catch (e: Exception) {
-            log.warn(e) { "[S3BlobStorageReader] Blob 로딩 실패 - key=$key" }
+            log.warn(e) { "[S3BlobStorageReader] Blob 로딩 실패 - hash=$blobHash, key=$key" }
             null
         }
     }
 }
+
 

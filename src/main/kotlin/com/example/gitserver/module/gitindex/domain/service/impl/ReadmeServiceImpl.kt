@@ -53,7 +53,7 @@ class ReadmeServiceImpl(
         val blobHash = getReadmeInfo(repoId, commitHash).blobHash
             ?: throw ReadmeNotFoundException(repoId, commitHash)
 
-        return blobReader.readBlobAsString(repoId, blobHash)
+        return blobReader.readBlobAsString(blobHash)
             ?: throw ReadmeLoadFailedException("blobs/$repoId/$blobHash", Exception("null body"))
     }
 

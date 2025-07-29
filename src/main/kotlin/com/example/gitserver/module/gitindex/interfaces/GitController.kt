@@ -1,11 +1,11 @@
-package com.example.gitserver.module.user.interfaces.rest
+package com.example.gitserver.module.gitindex.interfaces
 
 import com.example.gitserver.module.repository.application.service.RepositoryAccessService
 import io.swagger.v3.oas.annotations.Operation
-import org.springframework.beans.factory.annotation.Value
-import org.springframework.web.bind.annotation.*
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.web.bind.annotation.*
 
 private val log = mu.KotlinLogging.logger {}
 
@@ -20,7 +20,7 @@ class GitController(
      * Git HTTP 요청을 처리합니다.
      */
     @Operation(summary = "Get all users from Git")
-    @RequestMapping("/{ownerId}/{repo}.git/**", method = [RequestMethod.GET, RequestMethod.POST])
+    @RequestMapping("test/{ownerId}/{repo}.git/**", method = [RequestMethod.GET, RequestMethod.POST])
     fun handleGit(
         @PathVariable ownerId: Long,
         @PathVariable repo: String,

@@ -1,5 +1,6 @@
 package com.example.gitserver.module.repository.domain.event
 
+import com.example.gitserver.module.gitindex.domain.event.GitEvent
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import mu.KotlinLogging
 import org.springframework.beans.factory.annotation.Value
@@ -11,17 +12,17 @@ import software.amazon.awssdk.services.sqs.model.SendMessageRequest
 private val log = KotlinLogging.logger {}
 
 @Component
-class RepositoryEventPublisher(
+class GitEventPublisher(
     private val sqsClient: SqsClient,
     @Value("\${cloud.aws.sqs.queue-url}") private val queueUrl: String
 ) {
     private val objectMapper = jacksonObjectMapper()
 
     @Async("virtualThreadTaskExecutor")
-    fun publishRepositoryCreatedEvent(event: RepositoryCreatedEvent) {
+    fun publish(event: GitEvent) {
         try {
             val message = objectMapper.writeValueAsString(event)
-            log.info { "[SQS] 저장소 생성 이벤트 전송 - event=$event" }
+            log.info { "[SQS] Git 이벤트 전송 - event=$event" }
 
             val request = SendMessageRequest.builder()
                 .queueUrl(queueUrl)
@@ -31,7 +32,7 @@ class RepositoryEventPublisher(
             val response = sqsClient.sendMessage(request)
             log.info { "[SQS] 전송 완료 - messageId=${response.messageId()}" }
         } catch (e: Exception) {
-            log.error(e) { "[SQS] 저장소 생성 이벤트 전송 실패 - event=$event" }
+            log.error(e) { "[SQS] 이벤트 전송 실패 - event=$event" }
         }
     }
 }

@@ -4,6 +4,7 @@ import com.example.gitserver.common.extension.*
 import com.example.gitserver.module.gitindex.domain.Blob
 import com.example.gitserver.module.gitindex.domain.BlobTree
 import com.example.gitserver.module.gitindex.domain.Commit
+import com.example.gitserver.module.gitindex.domain.event.GitEvent
 import com.example.gitserver.module.gitindex.domain.service.BlobIndexer
 import com.example.gitserver.module.gitindex.domain.service.GitIndexWriter
 import com.example.gitserver.module.gitindex.domain.vo.*
@@ -12,6 +13,8 @@ import com.example.gitserver.module.gitindex.infrastructure.s3.S3BlobUploader
 import com.example.gitserver.module.user.infrastructure.persistence.UserRepository
 import mu.KotlinLogging
 import org.eclipse.jgit.api.Git
+import org.eclipse.jgit.lib.ObjectId
+import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.revwalk.RevWalk
 import org.eclipse.jgit.treewalk.TreeWalk
 import org.springframework.stereotype.Service
@@ -109,7 +112,7 @@ class DefaultBlobIndexer(
                     tasks += Runnable {
                         log.debug { "[가상 스레드 시작] path=$path, hash=$hash" }
                         try {
-                            blobUploader.upload(repositoryId, hash, bytes)
+                            blobUploader.upload(hash, bytes)
 
                             val blobVo = Blob(
                                 repositoryId = repositoryId,
@@ -160,5 +163,155 @@ class DefaultBlobIndexer(
                 log.info { "[indexRepository] 완료 - repositoryId=$repositoryId" }
             }
         }
+    }
+
+    override fun indexPush(event: GitEvent, gitDir: Path) {
+        log.info { "[indexPush] PUSH 이벤트 인덱싱 시작 - repoId=${event.repositoryId}, branch=${event.branch}, oldrev=${event.oldrev}, newrev=${event.newrev}" }
+        val repoDir = gitDir.toFile()
+        val git = try {
+            Git.open(repoDir)
+        } catch (e: Exception) {
+            throw GitRepositoryOpenException(repoDir.path, e)
+        }
+
+        git.use {
+            RevWalk(it.repository).use { revWalk ->
+                val oldId = event.oldrev?.let { ObjectId.fromString(it) }
+                val newId = event.newrev?.let { ObjectId.fromString(it) }
+                val EMPTY_COMMIT = "0000000000000000000000000000000000000000"
+
+                if (newId == null) {
+                    log.warn { "[indexPush] newrev 없음" }
+                    return
+                }
+
+                val commits = mutableListOf<RevCommit>()
+
+                if (event.oldrev == null || event.oldrev == EMPTY_COMMIT) {
+                    revWalk.markStart(revWalk.parseCommit(newId))
+                    for (commit in revWalk) {
+                        commits += commit
+                    }
+                } else {
+                    revWalk.markStart(revWalk.parseCommit(newId))
+                    revWalk.markUninteresting(revWalk.parseCommit(oldId))
+                    for (commit in revWalk) {
+                        commits += commit
+                    }
+                }
+                log.info { "[indexPush] 인덱싱 대상 커밋   수: ${commits.size}" }
+                for (commit in commits) {
+                    indexSingleCommit(
+                        event.repositoryId,
+                        commit,
+                        it,
+                        event.branch ?: "main"
+                    )
+                }
+            }
+        }
+    }
+
+
+    /**
+     * 단일 커밋을 인덱싱합니다.
+     * @param repositoryId 레포지토리 ID
+     * @param commit JGit RevCommit 객체
+     * @param git JGit Git 객체
+     * @param branch 브랜치 이름
+     */
+    private fun indexSingleCommit(
+        repositoryId: Long,
+        commit: RevCommit,
+        git: Git,
+        branch: String
+    ) {
+        val tree = commit.tree
+        val authorEmail = commit.authorIdent.emailAddress
+        val authorId = userRepository.findByEmail(authorEmail)?.id
+
+        val commitVo = Commit(
+            repositoryId = repositoryId,
+            hash = CommitHash(commit.name),
+            message = commit.fullMessage,
+            authorName = commit.authorIdent.name,
+            authorId = authorId,
+            authorEmail = authorEmail,
+            committedAt = commit.authorIdent.whenAsInstant,
+            committerName = commit.committerIdent.name,
+            committerEmail = commit.committerIdent.emailAddress,
+            treeHash = TreeHash(tree.id.name),
+            parentHashes = commit.parents.map { it.name },
+            createdAt = Instant.now(),
+            branch = branch,
+        )
+        gitIndexWriter.saveCommit(commitVo)
+        log.info { "[indexSingleCommit] 커밋 인덱싱 - hash=${commit.name}, author=${commit.authorIdent.name}" }
+
+        val treeWalk = TreeWalk(git.repository).apply {
+            addTree(tree)
+            isRecursive = true
+        }
+        val semaphore = Semaphore(20)
+        val tasks = mutableListOf<Runnable>()
+
+        while (treeWalk.next()) {
+            val path = treeWalk.pathString
+            val objectId = treeWalk.getObjectId(0)
+            val isDirectory = treeWalk.isSubtree
+            val bytes = try {
+                git.repository.open(objectId).bytes
+            } catch (e: Exception) {
+                log.warn(e) { "오브젝트 로드 실패 - path=$path, objectId=$objectId" }
+                continue
+            }
+            val hash = objectId.name
+            val extension = path.substringAfterLast('.', "")
+            val mimeType = bytes.detectMimeType()
+
+            tasks += Runnable {
+                log.debug { "[indexSingleCommit] path=$path, hash=$hash" }
+                try {
+                    blobUploader.upload(hash, bytes)
+                    val blobVo = Blob(
+                        repositoryId = repositoryId,
+                        hash = BlobHash(hash),
+                        path = FilePath(path),
+                        extension = extension,
+                        mimeType = mimeType,
+                        isBinary = bytes.isBinaryFile(),
+                        fileSize = bytes.size.toLong(),
+                        lineCount = bytes.countLines(),
+                        externalStorageKey = "blobs/$hash",
+                        createdAt = Instant.now()
+                    )
+                    gitIndexWriter.saveBlob(blobVo)
+                    val treeVo = BlobTree(
+                        repositoryId = repositoryId,
+                        commitHash = CommitHash(commit.name),
+                        path = FilePath(path),
+                        name = path.substringAfterLast('/'),
+                        isDirectory = isDirectory,
+                        fileHash = hash,
+                        size = bytes.size.toLong(),
+                        depth = path.count { it == '/' },
+                        fileTypeCodeId = null,
+                        lastModifiedAt = Instant.now()
+                    )
+                    gitIndexWriter.saveTree(treeVo)
+                } catch (e: Exception) {
+                    log.warn(e) { "[indexSingleCommit] 파일 처리 실패 - path=$path, hash=$hash" }
+                } finally {
+                    semaphore.release()
+                }
+            }
+        }
+
+        tasks.forEach { task ->
+            semaphore.acquire()
+            Thread.startVirtualThread(task)
+        }
+        repeat(semaphore.availablePermits()) { semaphore.acquire() }
+        log.info { "[indexSingleCommit] 완료 - commit=${commit.name}" }
     }
 }

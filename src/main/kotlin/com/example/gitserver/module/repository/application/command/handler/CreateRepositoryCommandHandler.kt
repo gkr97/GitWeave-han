@@ -1,14 +1,13 @@
 package com.example.gitserver.module.repository.application.command.handler
 
-import com.example.gitserver.common.exception.*
 import com.example.gitserver.module.common.service.CommonCodeCacheService
+import com.example.gitserver.module.gitindex.domain.event.GitEvent
 import com.example.gitserver.module.repository.application.command.CreateRepositoryCommand
 import com.example.gitserver.module.repository.application.service.GitService
 import com.example.gitserver.module.repository.domain.Branch
 import com.example.gitserver.module.repository.domain.Collaborator
 import com.example.gitserver.module.repository.domain.Repository
-import com.example.gitserver.module.repository.domain.event.RepositoryCreatedEvent
-import com.example.gitserver.module.repository.domain.event.RepositoryEventPublisher
+import com.example.gitserver.module.repository.domain.event.GitEventPublisher
 import com.example.gitserver.module.repository.exception.*
 import com.example.gitserver.module.repository.infrastructure.persistence.BranchRepository
 import com.example.gitserver.module.repository.infrastructure.persistence.CollaboratorRepository
@@ -25,13 +24,25 @@ class CreateRepositoryCommandHandler(
     private val repositoryRepository: RepositoryRepository,
     private val branchRepository: BranchRepository,
     private val gitService: GitService,
-    private val repositoryEventPublisher: RepositoryEventPublisher,
+    private val gitEventPublisher: GitEventPublisher,
     private val commonCodeCacheService: CommonCodeCacheService,
     private val collaboratorRepository: CollaboratorRepository,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
 ) {
     private val log = KotlinLogging.logger {}
 
+    /**
+     * 저장소 생성 명령을 처리합니다.
+     * - 저장소 이름 중복 검사
+     * - Git 디렉토리 초기화
+     * - 기본 브랜치 생성
+     * - 소유자 collaborator 등록
+     * - 초대 collaborator 등록
+     * - Git 이벤트 발행
+     *
+     * @param command 저장소 생성 명령
+     * @return 생성된 Repository 객체
+     */
     @Transactional
     fun handle(command: CreateRepositoryCommand): Repository {
         log.info { "저장소 생성 요청: owner=${command.owner.id}, name=${command.name}" }
@@ -124,8 +135,9 @@ class CreateRepositoryCommandHandler(
             TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
                 override fun afterCommit() {
                     try {
-                        repositoryEventPublisher.publishRepositoryCreatedEvent(
-                            RepositoryCreatedEvent(
+                        gitEventPublisher.publish(
+                            GitEvent(
+                                eventType = "REPO_CREATED",
                                 repositoryId = repository.id,
                                 ownerId = repository.owner.id,
                                 name = repository.name
