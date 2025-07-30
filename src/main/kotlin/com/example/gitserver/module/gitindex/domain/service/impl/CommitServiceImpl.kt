@@ -21,8 +21,8 @@ class CommitServiceImpl(
      * @return 파일 트리 노드 리스트
      */
     @Transactional(readOnly = true)
-    override fun getFileTreeAtRoot(repoId: Long, commitHash: String): List<TreeNodeResponse> {
-        return treeQueryRepository.getFileTreeAtRoot(repoId, commitHash)
+    override fun getFileTreeAtRoot(repoId: Long, commitHash: String, branch: String?): List<TreeNodeResponse> {
+        return treeQueryRepository.getFileTreeAtRoot(repoId, commitHash, branch)
     }
 
     /**
@@ -33,6 +33,7 @@ class CommitServiceImpl(
      */
     @Transactional(readOnly = true)
     override fun getLatestCommitHash(repositoryId: Long, branch: String): CommitResponse? {
-        return commitQueryRepository.getLatestCommit(repositoryId, branch)
+        val branchFullName = if (branch.startsWith("refs/heads/")) branch else "refs/heads/$branch"
+        return commitQueryRepository.getLatestCommit(repositoryId, branchFullName)
     }
 }

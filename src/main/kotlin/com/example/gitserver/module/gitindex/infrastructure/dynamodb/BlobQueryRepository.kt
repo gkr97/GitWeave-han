@@ -1,5 +1,6 @@
 package com.example.gitserver.module.gitindex.infrastructure.dynamodb
 
+import com.example.gitserver.module.gitindex.domain.dto.FileMeta
 import mu.KotlinLogging
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Repository
@@ -40,4 +41,36 @@ class BlobQueryRepository(
 
         return result
     }
+
+    fun getBlobMeta(
+        repoId: Long,
+        fileHash: String
+    ): FileMeta? {
+        return try {
+            val sk = "BLOB#$fileHash"
+            val response = dynamoDbClient.getItem {
+                it.tableName(tableName)
+                    .key(
+                        mapOf(
+                            "PK" to AttributeValue.fromS("REPO#$repoId"),
+                            "SK" to AttributeValue.fromS(sk)
+                        )
+                    )
+            }
+            if (!response.hasItem()) return null
+            val item = response.item()
+            FileMeta(
+                path = item["path"]?.s() ?: "",
+                externalStorageKey = item["external_storage_key"]?.s() ?: return null,
+                isBinary = item["is_binary"]?.bool() ?: false,
+                mimeType = item["mime_type"]?.s(),
+                size = item["file_size"]?.n()?.toLongOrNull()
+            )
+        } catch (e: Exception) {
+            log.error(e) { "[getBlobMeta] DynamoDB 메타 조회 실패 repoId=$repoId, fileHash=$fileHash" }
+            null
+        }
+    }
+
+
 }

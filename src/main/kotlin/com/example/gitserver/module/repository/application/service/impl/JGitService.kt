@@ -161,12 +161,12 @@ class JGitService(
      * @return 언어 통계 정보
      */
     override fun getCloneUrls(repository: Repository): CloneUrlsResponse {
-        val ownerId = repository.owner.id
+        val username = repository.owner.name ?: throw IllegalStateException("owner name 없음")
         val repoName = repository.name
         return CloneUrlsResponse(
-            https = "$gitBaseUrl/$ownerId/$repoName.git",
-            ssh = "git@git.yourdomain:$ownerId/$repoName.git",
-            zip = "$gitBaseUrl/$ownerId/$repoName/archive.zip"
+            https = "$gitBaseUrl/$username/$repoName.git",
+            ssh = "git@git.yourdomain:$username/$repoName.git",
+            zip = "$gitBaseUrl/$username/$repoName/archive.zip"
         )
     }
 

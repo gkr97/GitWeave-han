@@ -80,9 +80,12 @@ class GitPatAuthenticationFilter(
             log.info("Authorization 헤더가 없거나 Basic 스킴이 아님")
         }
 
-        val matcher = Regex("/(\\d+)/([\\w.-]+)\\.git.*").find(uri)
-        val ownerId = matcher?.groups?.get(1)?.value?.toLongOrNull()
+        val matcher = Regex("/([^/]+)/([\\w.-]+)\\.git.*").find(uri)
+        val ownerName = matcher?.groups?.get(1)?.value
         val repoName = matcher?.groups?.get(2)?.value
+
+        val owner = ownerName?.let { userRepository.findByName(it) }
+        val ownerId = owner?.id
 
         log.debug("파싱된 ownerId: {}, repoName: {}", ownerId, repoName)
 

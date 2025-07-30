@@ -9,6 +9,19 @@ type Query {
         sortDirection: SortDirection = DESC,
         keyword: String
     ): MyRepositoriesResult!
+    repositoryFileTree(
+        repositoryId: Long!
+        commitHash: String
+        path: String
+        branch: String
+    ): [TreeNodeResponse!]!
+    repositoryFileContent(
+        repositoryId: Long!
+        commitHash: String
+        path: String!
+        branch: String
+    ): FileContentResponse!
+
 }
 
 type MyRepositoriesResult {
@@ -75,8 +88,22 @@ type TreeNodeResponse {
     path: String!
     isDirectory: Boolean!
     size: Long
+    lastCommitHash: String
     lastCommitMessage: String
     lastCommittedAt: String
+    lastCommitter: RepositoryUserResponse
+}
+
+type FileContentResponse {
+    path: String!
+    content: String
+    isBinary: Boolean!
+    mimeType: String
+    size: Long
+    commitHash: String
+    commitMessage: String
+    committedAt: String
+    committer: RepositoryUserResponse
 }
 
 type RepositoryUserResponse {

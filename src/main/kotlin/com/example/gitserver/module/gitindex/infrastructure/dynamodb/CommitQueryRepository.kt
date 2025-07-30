@@ -7,7 +7,6 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Repository
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue
-import software.amazon.awssdk.services.dynamodb.model.Select
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -36,10 +35,17 @@ class CommitQueryRepository(
             log.warn { "[CommitQueryRepository] 커밋 없음 - repositoryId=$repositoryId, branch=$branch" }
         }
 
-        val commitHash = item["SK"]?.s()?.split("#")?.lastOrNull()
+        val sk = item["SK"]?.s()
+        val skParts = sk?.split("#")
+        val commitHash = skParts?.getOrNull(1)
+        val branchInSK = skParts?.getOrNull(2)
+
         if (commitHash.isNullOrBlank()) {
-            log.error { "[CommitQueryRepository] 커밋 해시 파싱 실패 - SK=${item["SK"]?.s()}" }
+            log.error { "[CommitQueryRepository] 커밋 해시 파싱 실패 - SK=$sk" }
             return null
+        }
+        if (branchInSK != null && branchInSK != branch) {
+            log.warn { "[CommitQueryRepository] SK의 branch와 입력 branch 불일치함 - SK=$sk, 파라미터=$branch" }
         }
 
         val committedAt = item["committed_at"]?.s()

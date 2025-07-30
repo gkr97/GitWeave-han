@@ -3,7 +3,6 @@ package com.example.gitserver.module.repository.interfaces.graphql
 import com.example.gitserver.module.repository.application.query.RepositoryQueryService
 import com.example.gitserver.module.repository.interfaces.dto.MyRepositoriesResult
 import com.example.gitserver.module.repository.interfaces.dto.RepoDetailResponse
-import com.example.gitserver.module.repository.interfaces.dto.RepositoryListPageResponse
 import com.example.gitserver.module.repository.interfaces.dto.RepositoryListRequest
 import com.example.gitserver.module.user.domain.CustomUserDetails
 import com.example.gitserver.module.user.exception.UserLoginException

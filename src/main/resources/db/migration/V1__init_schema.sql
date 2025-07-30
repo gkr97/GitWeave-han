@@ -256,3 +256,15 @@ CREATE TABLE `personal_access_token_usage` (
                                                KEY `idx_pat_usage_token_id` (`token_id`),
                                                CONSTRAINT `fk_pat_usage_token_id` FOREIGN KEY (`token_id`) REFERENCES `personal_access_token` (`id`)
 ) COMMENT='PAT 사용 이력';
+
+CREATE TABLE `user_rename_history` (
+                                       `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT 'PK',
+                                       `user_id` BIGINT NOT NULL COMMENT '유저 PK',
+                                       `old_username` VARCHAR(100) NOT NULL COMMENT '변경 전 username',
+                                       `new_username` VARCHAR(100) NOT NULL COMMENT '변경 후 username',
+                                       `changed_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '변경 시각',
+                                       PRIMARY KEY (`id`),
+                                       KEY `idx_user_rename_history_user_id` (`user_id`),
+                                       KEY `idx_user_rename_history_old_username` (`old_username`),
+                                       CONSTRAINT `fk_user_rename_history_user_id` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`)
+) COMMENT='username 변경 이력';

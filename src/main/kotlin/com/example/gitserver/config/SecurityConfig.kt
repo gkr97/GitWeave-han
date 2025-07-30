@@ -70,7 +70,10 @@ class SecurityConfig(
             .exceptionHandling { exceptionHandling ->
                 exceptionHandling
                     .authenticationEntryPoint { request, response, authException ->
-                        response.setHeader("WWW-Authenticate", "Basic realm=\"Git\"")
+                        val uri = request.requestURI
+                        if (uri.endsWith(".git") || uri.contains(".git/")) {
+                            response.setHeader("WWW-Authenticate", "Basic realm=\"Git\"")
+                        }
                         response.sendError(HttpServletResponse.SC_UNAUTHORIZED, authException.message)
                     }
             }

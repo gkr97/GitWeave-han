@@ -273,7 +273,10 @@ class RepositoryQueryService(
             )
         } ?: RepositoryStatsResponse(0, 0, 0, 0, 0, null)
 
-        val fileTree = commitService.getFileTreeAtRoot(repoId, mainCommit.hash)
+        val fileTree = commitService.getFileTreeAtRoot(repoId, mainCommit.hash, targetBranchName)
+        val sortedFileTree = fileTree.sortedWith(
+            compareBy<TreeNodeResponse>({ !it.isDirectory }, { it.name.lowercase() })
+        )
 
         return RepoDetailResponse(
             id = repo.id,
@@ -294,7 +297,7 @@ class RepositoryQueryService(
             defaultBranch = repo.defaultBranch,
             branches = branches,
             stats = statsResponse,
-            fileTree = fileTree
+            fileTree = sortedFileTree
         )
     }
 

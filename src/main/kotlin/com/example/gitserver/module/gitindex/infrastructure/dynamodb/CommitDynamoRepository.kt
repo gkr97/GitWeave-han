@@ -19,7 +19,7 @@ class CommitDynamoRepository(
 
         val item = mutableMapOf(
             "PK" to AttributeValue.fromS("REPO#${commit.repositoryId}"),
-            "SK" to AttributeValue.fromS("COMMIT#${commit.hash.value}"),
+            "SK" to AttributeValue.fromS("COMMIT#${commit.hash.value}#${commit.branch}"),
             "type" to AttributeValue.fromS("commit"),
             "created_at" to AttributeValue.fromS(commit.createdAt.toString()),
             "committed_at" to AttributeValue.fromS(commit.committedAt.toString()),
