@@ -28,7 +28,7 @@ class RegisterUserCommandHandler(
      * @throws RegisterUserException 이메일 중복 시 예외 발생
      */
     fun handle(command: RegisterUserCommand): User {
-        if (userRepository.existsByEmail(command.email)) {
+        if (userRepository.existsByEmailAndIsDeletedFalse(command.email)) {
             log.warn { "회원가입 실패 - 이미 존재하는 이메일: ${command.email}" }
             throw RegisterUserException(
                 "EMAIL_ALREADY_EXISTS",

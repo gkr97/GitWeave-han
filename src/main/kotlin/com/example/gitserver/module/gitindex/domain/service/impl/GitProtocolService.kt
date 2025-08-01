@@ -13,7 +13,7 @@ import mu.KotlinLogging
 private val log = KotlinLogging.logger {}
 
 @Service
-class JGitRepoService(
+class GitProtocolService(
     @Value("\${git.storage.bare-path}") private val barePath: String,
 ) {
 

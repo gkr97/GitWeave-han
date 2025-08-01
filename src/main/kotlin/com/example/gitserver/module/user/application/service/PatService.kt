@@ -75,7 +75,7 @@ class PatService(
             if (parts.size == 2) {
                 val username = parts[0]
                 val pat = parts[1]
-                val user = userRepository.findByEmail(username)
+                val user = userRepository.findByEmailAndIsDeletedFalse(username)
                 if (user != null && validatePat(user.id, pat)) {
                     return user.id
                 }

@@ -18,7 +18,6 @@ import org.eclipse.jgit.lib.Repository
 import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.revwalk.RevWalk
 import org.eclipse.jgit.treewalk.TreeWalk
-import org.eclipse.jgit.treewalk.filter.TreeFilter
 import org.springframework.stereotype.Service
 import java.nio.file.Path
 import java.time.Instant
@@ -27,7 +26,7 @@ import java.util.concurrent.Semaphore
 private val log = KotlinLogging.logger {}
 
 @Service
-class DefaultBlobIndexer(
+class BlobIndexerServiceImpl(
     private val gitIndexWriter: GitIndexWriter,
     private val blobUploader: S3BlobUploader,
     private val userRepository: UserRepository,
@@ -60,7 +59,7 @@ class DefaultBlobIndexer(
                 val fullBranch = it.repository.fullBranch ?: "refs/heads/main"
 
                 val authorEmail = commit.authorIdent.emailAddress
-                val authorId = userRepository.findByEmail(authorEmail)?.id
+                val authorId = userRepository.findByEmailAndIsDeletedFalse(authorEmail)?.id
                     ?: throw AuthorNotFoundException(authorEmail)
 
                 val commitVo = Commit(
@@ -163,7 +162,7 @@ class DefaultBlobIndexer(
     ) {
         val tree = commit.tree
         val authorEmail = commit.authorIdent.emailAddress
-        val authorId = userRepository.findByEmail(authorEmail)?.id ?: run {
+        val authorId = userRepository.findByEmailAndIsDeletedFalse(authorEmail)?.id ?: run {
             log.warn { "[indexSingleCommit] authorId를 찾을 수 없음 - email=$authorEmail" }
             -1L
         }

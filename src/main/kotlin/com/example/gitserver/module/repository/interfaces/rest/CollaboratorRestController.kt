@@ -3,7 +3,7 @@ package com.example.gitserver.module.repository.interfaces.rest
 import com.example.gitserver.common.response.ApiResponse
 import com.example.gitserver.module.repository.application.command.handler.CollaboratorCommandHandler
 import com.example.gitserver.module.repository.application.query.CollaboratorQueryService
-import com.example.gitserver.module.repository.application.service.UserSearchService
+import com.example.gitserver.module.user.application.service.RepoUserSearchService
 import com.example.gitserver.module.repository.interfaces.dto.CollaboratorResponse
 import com.example.gitserver.module.repository.interfaces.dto.UserSearchResponse
 import com.example.gitserver.module.user.infrastructure.persistence.UserRepository
@@ -20,7 +20,7 @@ class CollaboratorRestController(
     private val collaboratorCommandHandler: CollaboratorCommandHandler,
     private val userRepository: UserRepository,
     private val collaboratorQueryService: CollaboratorQueryService,
-    private val userSearchService: UserSearchService,
+    private val repoUserSearchService: RepoUserSearchService,
 ) {
 
     @Operation(summary = "Collaborator 초대")
@@ -30,7 +30,7 @@ class CollaboratorRestController(
         @RequestParam userId: Long,
         @AuthenticationPrincipal userDetails: UserDetails
     ): ResponseEntity<ApiResponse<String>> {
-        val requester = userRepository.findByEmail(userDetails.username)
+        val requester = userRepository.findByEmailAndIsDeletedFalse(userDetails.username)
             ?: throw IllegalArgumentException("사용자 없음")
 
         collaboratorCommandHandler.inviteCollaborator(repoId, userId, requester.id)
@@ -43,7 +43,7 @@ class CollaboratorRestController(
         @PathVariable repoId: Long,
         @AuthenticationPrincipal userDetails: UserDetails
     ): ResponseEntity<ApiResponse<String>> {
-        val user = userRepository.findByEmail(userDetails.username)
+        val user = userRepository.findByEmailAndIsDeletedFalse(userDetails.username)
             ?: throw IllegalArgumentException("사용자 없음")
 
         collaboratorCommandHandler.acceptInvitation(repoId, user.id)
@@ -58,7 +58,7 @@ class CollaboratorRestController(
         @PathVariable repoId: Long,
         @AuthenticationPrincipal userDetails: UserDetails
     ): ResponseEntity<ApiResponse<String>> {
-        val user = userRepository.findByEmail(userDetails.username)
+        val user = userRepository.findByEmailAndIsDeletedFalse(userDetails.username)
             ?: throw IllegalArgumentException("사용자 없음")
 
         collaboratorCommandHandler.rejectInvitation(repoId, user.id)
@@ -74,7 +74,7 @@ class CollaboratorRestController(
         @PathVariable userId: Long,
         @AuthenticationPrincipal userDetails: UserDetails
     ): ResponseEntity<ApiResponse<String>> {
-        val requester = userRepository.findByEmail(userDetails.username)
+        val requester = userRepository.findByEmailAndIsDeletedFalse(userDetails.username)
             ?: throw IllegalArgumentException("사용자 없음")
 
         collaboratorCommandHandler.removeCollaborator(repoId, userId, requester.id)
@@ -89,7 +89,7 @@ class CollaboratorRestController(
         @PathVariable repoId: Long,
         @AuthenticationPrincipal userDetails: UserDetails
     ): ResponseEntity<ApiResponse<List<CollaboratorResponse>>> {
-        val user = userRepository.findByEmail(userDetails.username)
+        val user = userRepository.findByEmailAndIsDeletedFalse(userDetails.username)
             ?: throw IllegalArgumentException("사용자 없음")
 
         val collaborators = collaboratorQueryService.getCollaborators(repoId, user.id)
@@ -104,10 +104,10 @@ class CollaboratorRestController(
         @RequestParam keyword: String,
         @AuthenticationPrincipal userDetails: UserDetails
     ): ResponseEntity<ApiResponse<List<UserSearchResponse>>> {
-        val requester = userRepository.findByEmail(userDetails.username)
+        val requester = userRepository.findByEmailAndIsDeletedFalse(userDetails.username)
             ?: throw IllegalArgumentException("사용자 없음")
 
-        val candidates = userSearchService.searchUsers(repoId, keyword)
+        val candidates = repoUserSearchService.searchUsers(repoId, keyword)
         return ResponseEntity.ok(ApiResponse.success(HttpStatus.OK.value(), "유저 초대 목록 조회 성공", candidates))
     }
 }

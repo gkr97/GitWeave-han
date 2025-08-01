@@ -3,7 +3,7 @@ package com.example.gitserver.module.repository.application.command.handler
 import com.example.gitserver.module.common.service.CommonCodeCacheService
 import com.example.gitserver.module.gitindex.domain.event.GitEvent
 import com.example.gitserver.module.repository.application.command.CreateRepositoryCommand
-import com.example.gitserver.module.repository.application.service.GitService
+import com.example.gitserver.module.gitindex.domain.service.GitService
 import com.example.gitserver.module.repository.domain.Branch
 import com.example.gitserver.module.repository.domain.Collaborator
 import com.example.gitserver.module.repository.domain.Repository
@@ -47,7 +47,7 @@ class CreateRepositoryCommandHandler(
     fun handle(command: CreateRepositoryCommand): Repository {
         log.info { "저장소 생성 요청: owner=${command.owner.id}, name=${command.name}" }
 
-        if (repositoryRepository.existsByOwnerIdAndName(command.owner.id, command.name)) {
+        if (repositoryRepository.existsByOwnerIdAndNameAndIsDeletedFalse(command.owner.id, command.name)) {
             log.warn { "중복된 저장소 이름: owner=${command.owner.id}, name=${command.name}" }
             throw DuplicateRepositoryNameException(command.name)
         }

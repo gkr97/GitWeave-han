@@ -31,7 +31,7 @@ class RepositoryAccessService(
     ): AccessResult {
         log.info("Check access: repoName={}, ownerId={}, authHeader={}", repoName, ownerId, authorization != null)
 
-        val repo = repoRepository.findByOwnerIdAndName(ownerId, repoName)
+        val repo = repoRepository.findByOwnerIdAndNameAndIsDeletedFalse(ownerId, repoName)
             ?: run {
                 log.warn("Repository not found: ownerId={}, repoName={}", ownerId, repoName)
                 return AccessResult.NotFound

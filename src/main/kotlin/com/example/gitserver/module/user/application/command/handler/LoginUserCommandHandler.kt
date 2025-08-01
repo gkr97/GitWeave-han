@@ -29,7 +29,7 @@ class LoginUserCommandHandler(
      * @throws UserLoginException 이메일 또는 비밀번호가 잘못된 경우
      */
     fun handle(command: LoginUserCommand, ipAddress: String, userAgent: String?): User {
-        val user = userRepository.findByEmail(command.email)
+        val user = userRepository.findByEmailAndIsDeletedFalse(command.email)
             ?: run {
                 log.warn { "로그인 실패 - 존재하지 않는 이메일: ${command.email}" }
                 throw UserLoginException(

@@ -1,6 +1,6 @@
-package com.example.gitserver.module.repository.application.service.impl
+package com.example.gitserver.module.gitindex.domain.service.impl
 
-import com.example.gitserver.module.repository.application.service.GitService
+import com.example.gitserver.module.gitindex.domain.service.GitService
 import com.example.gitserver.module.repository.domain.Repository
 import com.example.gitserver.module.repository.interfaces.dto.CloneUrlsResponse
 import mu.KotlinLogging
@@ -13,14 +13,14 @@ import java.nio.file.Paths
 import java.time.Instant
 import java.util.*
 
-private val log = KotlinLogging.logger {}
-
 @Service
-class JGitService(
+class GitRepositoryService(
     @Value("\${git.storage.bare-path}") private val bareRootPath: String,
     @Value("\${git.storage.workdir-path}") private val workdirRootPath: String,
     @Value("\${git.server.base-url}") private val gitBaseUrl: String,
 ) : GitService {
+
+    private val log = KotlinLogging.logger {}
 
     /**
      * * 저장소를 초기화하고 README, .gitignore, LICENSE 파일을 생성합니다.

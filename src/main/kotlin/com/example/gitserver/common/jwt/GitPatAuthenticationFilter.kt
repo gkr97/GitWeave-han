@@ -55,7 +55,7 @@ class GitPatAuthenticationFilter(
                     val pat = parts[1]
                     log.info("인증 시도 - username(email): {}", username)
 
-                    val user = userRepository.findByEmail(username)
+                    val user = userRepository.findByEmailAndIsDeletedFalse(username)
                     if (user != null) {
                         val patHash = hashPat(pat)
                         val validPat = patRepository.findByUserIdAndTokenHashAndIsActiveTrue(user.id, patHash)
@@ -84,13 +84,13 @@ class GitPatAuthenticationFilter(
         val ownerName = matcher?.groups?.get(1)?.value
         val repoName = matcher?.groups?.get(2)?.value
 
-        val owner = ownerName?.let { userRepository.findByName(it) }
+        val owner = ownerName?.let { userRepository.findByNameAndIsDeletedFalse(it) }
         val ownerId = owner?.id
 
         log.debug("파싱된 ownerId: {}, repoName: {}", ownerId, repoName)
 
         val repo = if (ownerId != null && repoName != null) {
-            repositoryRepository.findByOwnerIdAndName(ownerId, repoName)
+            repositoryRepository.findByOwnerIdAndNameAndIsDeletedFalse(ownerId, repoName)
         } else null
 
         if (repo == null) {

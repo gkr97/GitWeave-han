@@ -1,9 +1,7 @@
 package com.example.gitserver.module.repository.interfaces.graphql
 
 import com.example.gitserver.module.repository.application.query.RepositoryQueryService
-import com.example.gitserver.module.repository.interfaces.dto.MyRepositoriesResult
-import com.example.gitserver.module.repository.interfaces.dto.RepoDetailResponse
-import com.example.gitserver.module.repository.interfaces.dto.RepositoryListRequest
+import com.example.gitserver.module.repository.interfaces.dto.*
 import com.example.gitserver.module.user.domain.CustomUserDetails
 import com.example.gitserver.module.user.exception.UserLoginException
 import org.springframework.graphql.data.method.annotation.Argument
@@ -27,12 +25,41 @@ class RepositoryQueryResolver(
     @QueryMapping
     fun myRepositories(
         @AuthenticationPrincipal user: CustomUserDetails?,
-        @Argument request: RepositoryListRequest?
+        @Argument page: Int?,
+        @Argument size: Int?,
+        @Argument sortBy: String?,
+        @Argument sortDirection: String?,
+        @Argument keyword: String?
     ): MyRepositoriesResult {
         val userId = user?.getUserId() ?: throw UserLoginException("USER_NOT_LOGGED_IN", "사용자가 로그인하지 않았습니다.")
-        val requestActual = request ?: RepositoryListRequest()
-        return repositoryQueryService.getRepositoryList(userId, requestActual)
+        val request = RepositoryListRequest(
+            page = page ?: 1,
+            size = size ?: 10,
+            sortBy = sortBy ?: "lastUpdatedAt",
+            sortDirection = sortDirection ?: "DESC",
+            keyword = keyword
+        )
+        return repositoryQueryService.getRepositoryList(userId, request)
     }
 
-
+    @QueryMapping
+    fun userRepositories(
+        @Argument userId: Long,
+        @Argument page: Int?,
+        @Argument size: Int?,
+        @Argument sortBy: String?,
+        @Argument sortDirection: String?,
+        @Argument keyword: String?,
+        @AuthenticationPrincipal user: CustomUserDetails?
+    ): UserRepositoriesResult {
+        val currentUserId = user?.getUserId()
+        val request = UserRepositoryListRequest(
+            page = page ?: 1,
+            size = size ?: 10,
+            sortBy = sortBy ?: "lastUpdatedAt",
+            sortDirection = sortDirection ?: "DESC",
+            keyword = keyword
+        )
+        return repositoryQueryService.getUserRepositoryList(userId, currentUserId, request)
+    }
 }

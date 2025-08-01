@@ -9,6 +9,14 @@ type Query {
         sortDirection: SortDirection = DESC,
         keyword: String
     ): MyRepositoriesResult!
+    userRepositories(
+        userId: Long!
+        page: Int = 1,
+        size: Int = 10,
+        sortBy: RepositorySortBy = lastUpdatedAt,
+        sortDirection: SortDirection = DESC,
+        keyword: String
+    ): UserRepositoriesResult!
     repositoryFileTree(
         repositoryId: Long!
         commitHash: String
@@ -23,6 +31,21 @@ type Query {
     ): FileContentResponse!
 
 }
+
+type UserRepositoriesResult {
+    profile: RepositoryUserResponse!
+    repositories: UserRepositoryListPageResponse!
+}
+
+type UserRepositoryListPageResponse {
+    content: [RepositoryListItem!]!
+    page: Int!
+    size: Int!
+    totalElements: Int!
+    totalPages: Int!
+    hasNext: Boolean!
+}
+
 
 type MyRepositoriesResult {
     profile: RepositoryUserResponse!

@@ -4,7 +4,8 @@ import com.example.gitserver.module.common.service.CommonCodeCacheService
 import com.example.gitserver.module.gitindex.domain.service.CommitService
 import com.example.gitserver.module.gitindex.domain.service.ReadmeService
 import com.example.gitserver.module.pullrequest.infrastructure.persistence.PullRequestRepository
-import com.example.gitserver.module.repository.application.service.GitService
+import com.example.gitserver.module.gitindex.domain.service.GitService
+import com.example.gitserver.module.repository.domain.Repository
 import com.example.gitserver.module.repository.exception.RepositoryAccessDeniedException
 import com.example.gitserver.module.repository.exception.RepositoryNotFoundException
 import com.example.gitserver.module.repository.infrastructure.persistence.*
@@ -62,7 +63,7 @@ class RepositoryQueryService(
         val pageable = PageRequest.of(request.page - 1, request.size, direction, sortProperty)
         log.debug { "[getRepositoryList] sortProperty=$sortProperty, direction=$direction, pageable=$pageable" }
 
-        val ownIds = repositoryRepository.findByOwnerId(userId, Pageable.unpaged()).map { it.id }
+        val ownIds = repositoryRepository.findByOwnerIdAndIsDeletedFalse(userId, Pageable.unpaged()).map { it.id }
         log.debug { "[getRepositoryList] ownIds(size=${ownIds.size})=$ownIds" }
 
         val invitedIds = collaboratorRepository.findAcceptedByUserId(userId).map { it.repository.id }
@@ -84,9 +85,9 @@ class RepositoryQueryService(
         val allIds = (ownIds + invitedIds + filteredBookmarkedIds).distinct()
         log.info { "[getRepositoryList] allIds(size=${allIds.size})=$allIds" }
         val page = if (!request.keyword.isNullOrBlank()) {
-            repositoryRepository.findByIdInWithKeyword(allIds, request.keyword, pageable)
+            repositoryRepository.findByIdInAndKeywordIgnoreCase(allIds, request.keyword, pageable)
         } else {
-            repositoryRepository.findByIdIn(allIds, pageable)
+            repositoryRepository.findByIdInAndIsDeletedFalse(allIds, pageable)
         }
         log.info { "[getRepositoryList] page number=${page.number + 1}, page size=${page.size}, totalElements=${page.totalElements}, totalPages=${page.totalPages}, contentSize=${page.content.size}" }
 
@@ -323,4 +324,94 @@ class RepositoryQueryService(
             )
         } ?: user
     }
+
+    @Transactional(readOnly = true)
+    fun getUserRepositoryList(
+        targetUserId: Long,
+        currentUserId: Long?,
+        request: UserRepositoryListRequest
+    ): UserRepositoriesResult {
+        val user = userRepository.findById(targetUserId).orElseThrow { UserNotFoundException(targetUserId) }
+        val profile = RepositoryUserResponse(
+            userId = user.id,
+            nickname = user.name ?: "",
+            profileImageUrl = user.profileImageUrl
+        )
+
+        val visibilityCodes = commonCodeCacheService.getCodeDetailsOrLoad("VISIBILITY")
+        val publicCodeId = visibilityCodes.firstOrNull { it.code.equals("PUBLIC", true) }?.id
+            ?: throw IllegalStateException("PUBLIC 코드가 없습니다.")
+        val privateCodeId = visibilityCodes.firstOrNull { it.code.equals("PRIVATE", true) }?.id
+            ?: throw IllegalStateException("PRIVATE 코드가 없습니다.")
+
+        // 1. 공개 레포
+        val publicIds = repositoryRepository
+            .findByOwnerIdAndVisibilityCodeIdAndIsDeletedFalse(targetUserId, publicCodeId)
+            .map { it.id }
+
+        // 2. 내가 초대 받은 비공개 레포
+        val invitedPrivateIds = if (currentUserId != null) {
+            collaboratorRepository.findAcceptedByUserIdAndOwnerId(currentUserId, targetUserId)
+                .map { it.repository }
+                .filter { it.visibilityCodeId == privateCodeId && !it.isDeleted }
+                .map { it.id }
+        } else emptyList()
+
+        val allIds = (publicIds + invitedPrivateIds).distinct()
+
+        // 3. pageable 및 sort
+        val sortProperty = when (request.sortBy) {
+            "name" -> "name"
+            else -> "updatedAt"
+        }
+        val direction = if (request.sortDirection.equals("ASC", true)) Sort.Direction.ASC else Sort.Direction.DESC
+        val pageable = PageRequest.of((request.page - 1).coerceAtLeast(0), request.size.coerceAtLeast(1), direction, sortProperty)
+
+        // 4. 검색/정렬/페이징을 DB에서 처리
+        val page = if (!request.keyword.isNullOrBlank()) {
+            repositoryRepository.findByIdInAndKeywordIgnoreCase(allIds, request.keyword, pageable)
+        } else {
+            repositoryRepository.findByIdInAndIsDeletedFalse(allIds, pageable)
+        }
+
+        val bookmarkedSet = if (currentUserId != null) {
+            bookmarkRepository.findByUserId(currentUserId).map { it.repository.id }.toSet()
+        } else emptySet()
+        val invitedSet = invitedPrivateIds.toSet()
+
+        val contentWithInfo = page.content.map { repo ->
+            val repoVisibility = visibilityCodes.firstOrNull { it.id == repo.visibilityCodeId }?.code ?: "unknown"
+            RepositoryListItem(
+                id = repo.id,
+                name = repo.name,
+                description = repo.description,
+                visibility = repoVisibility,
+                lastUpdatedAt = (repo.updatedAt ?: repo.createdAt).toString(),
+                isOwner = false,
+                isBookmarked = bookmarkedSet.contains(repo.id),
+                isInvited = invitedSet.contains(repo.id),
+                language = repo.language,
+                ownerInfo = RepositoryUserResponse(
+                    userId = repo.owner.id,
+                    nickname = repo.owner.name ?: "이름 없음",
+                    profileImageUrl = repo.owner.profileImageUrl
+                )
+            )
+        }
+
+        return UserRepositoriesResult(
+            profile = profile,
+            repositories = UserRepositoryListPageResponse(
+                content = contentWithInfo,
+                page = page.number + 1,
+                size = page.size,
+                totalElements = page.totalElements,
+                totalPages = page.totalPages,
+                hasNext = page.hasNext()
+            )
+        )
+    }
+
+
+
 }

@@ -1,7 +1,7 @@
 package com.example.gitserver.module.gitindex.interfaces
 
 import com.example.gitserver.module.gitindex.domain.event.GitEvent
-import com.example.gitserver.module.gitindex.domain.service.impl.JGitRepoService
+import com.example.gitserver.module.gitindex.domain.service.impl.GitProtocolService
 import com.example.gitserver.module.repository.application.service.GitRepositorySyncService
 import com.example.gitserver.module.repository.application.service.RepositoryAccessService
 import com.example.gitserver.module.repository.domain.event.GitEventPublisher
@@ -17,7 +17,7 @@ import jakarta.servlet.http.HttpServletResponse
 @RestController
 class JGitHttpController(
     private val repoAccessService: RepositoryAccessService,
-    private val jGitRepoService: JGitRepoService,
+    private val gitProtocolService: GitProtocolService,
     private val gitEventPublisher: GitEventPublisher,
     private val repositoryRepository: RepositoryRepository,
     private val gitRepositorySyncService: GitRepositorySyncService,
@@ -28,7 +28,7 @@ class JGitHttpController(
      * username → userId 변환 유틸
      */
     private fun resolveUserId(username: String): Long {
-        return userRepository.findByName(username)?.id
+        return userRepository.findByNameAndIsDeletedFalse(username)?.id
             ?: throw IllegalArgumentException("존재하지 않는 사용자: $username")
     }
 
@@ -46,7 +46,7 @@ class JGitHttpController(
             return null
         }
         return try {
-            jGitRepoService.openRepository(userId, repo)
+            gitProtocolService.openRepository(userId, repo)
         } catch (e: Exception) {
             response.sendError(404, "Repository not found")
             null
@@ -63,7 +63,7 @@ class JGitHttpController(
         response: HttpServletResponse
     ) {
         val repository = openAuthorizedRepository(username, repo, request, response) ?: return
-        jGitRepoService.advertiseRefs(service, repository, response)
+        gitProtocolService.advertiseRefs(service, repository, response)
     }
 
     @Operation(summary = "Get repository capabilities")
@@ -79,7 +79,7 @@ class JGitHttpController(
         response: HttpServletResponse
     ) {
         val repository = openAuthorizedRepository(username, repo, request, response) ?: return
-        jGitRepoService.uploadPack(repository, request, response)
+        gitProtocolService.uploadPack(repository, request, response)
     }
 
     @Operation(summary = "Receive pack for pushing changes")
@@ -97,7 +97,7 @@ class JGitHttpController(
         val userId = resolveUserId(username)
         val repository = openAuthorizedRepository(username, repo, request, response) ?: return
 
-        val repoEntity = repositoryRepository.findByOwnerIdAndName(userId, repo)
+        val repoEntity = repositoryRepository.findByOwnerIdAndNameAndIsDeletedFalse(userId, repo)
             ?: throw IllegalArgumentException("Repository not found")
         val repositoryId = repoEntity.id
 
@@ -122,7 +122,7 @@ class JGitHttpController(
                 )
             }
         }
-        jGitRepoService.receivePack(repository, request, response, hook)
+        gitProtocolService.receivePack(repository, request, response, hook)
     }
 
     private fun unauthorizedResponse(response: HttpServletResponse) {

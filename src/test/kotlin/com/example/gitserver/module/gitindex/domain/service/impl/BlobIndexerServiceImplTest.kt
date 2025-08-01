@@ -13,19 +13,19 @@ import org.mockito.kotlin.whenever
 import java.nio.file.Files
 import kotlin.test.Test
 
-class DefaultBlobIndexerTest {
+class BlobIndexerServiceImplTest {
 
     private lateinit var gitIndexWriter: GitIndexWriter
     private lateinit var blobUploader: S3BlobUploader
     private lateinit var userRepository: UserRepository
-    private lateinit var blobIndexer: DefaultBlobIndexer
+    private lateinit var blobIndexer: BlobIndexerServiceImpl
 
     @BeforeEach
     fun setUp() {
         gitIndexWriter = mock()
         blobUploader = mock()
         userRepository = mock()
-        blobIndexer = DefaultBlobIndexer(gitIndexWriter, blobUploader, userRepository)
+        blobIndexer = BlobIndexerServiceImpl(gitIndexWriter, blobUploader, userRepository)
     }
 
     @Test

@@ -1,4 +1,4 @@
-package com.example.gitserver.module.repository.application.service
+package com.example.gitserver.module.gitindex.domain.service
 
 import com.example.gitserver.module.repository.domain.Repository
 import com.example.gitserver.module.repository.interfaces.dto.CloneUrlsResponse

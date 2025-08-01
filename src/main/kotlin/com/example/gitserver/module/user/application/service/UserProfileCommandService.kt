@@ -24,7 +24,7 @@ class UserProfileCommandService(
      */
     @Transactional
     fun updateProfileImage(userId: Long, imageFile: MultipartFile): String {
-        val user = userRepository.findByIdOrIdNull(userId)
+        val user = userRepository.findByIdAndIsDeletedFalse(userId)
             ?: throw UserNotFoundException(userId)
 
         val imageUrl = s3Uploader.upload(imageFile, "user-profile-pictures/$userId")
@@ -41,7 +41,7 @@ class UserProfileCommandService(
      */
     @Transactional
     fun updateName(userId: Long, name: String) {
-        val user = userRepository.findByIdOrIdNull(userId)
+        val user = userRepository.findByIdAndIsDeletedFalse(userId)
             ?: throw UserNotFoundException(userId)
 
         val oldName = user.name

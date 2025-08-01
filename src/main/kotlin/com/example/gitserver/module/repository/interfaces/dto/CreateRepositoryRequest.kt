@@ -5,7 +5,7 @@ import jakarta.validation.constraints.Size
 
 data class CreateRepositoryRequest(
     @field:NotBlank(message = "저장소 이름은 필수입니다.")
-    @field:Size(max = 50, message = "저장소 이름은 50자 이하만 허용됩니다.")
+    @field:Size(max = 100, message = "저장소 이름은 100자 이하만 허용됩니다.")
     val name: String,
 
     @field:Size(max = 255, message = "설명은 최대 255자까지 입력 가능합니다.")

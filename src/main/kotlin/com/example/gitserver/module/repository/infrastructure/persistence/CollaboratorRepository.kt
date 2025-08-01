@@ -1,6 +1,7 @@
 package com.example.gitserver.module.repository.infrastructure.persistence
 
 import com.example.gitserver.module.repository.domain.Collaborator
+import com.example.gitserver.module.repository.domain.Repository
 import io.lettuce.core.dynamic.annotation.Param
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
@@ -17,4 +18,13 @@ interface CollaboratorRepository: JpaRepository<Collaborator, Long> {
     @Query("SELECT c FROM Collaborator c WHERE c.accepted = true AND c.user.id = :userId AND c.repository.id = :repoId")
     fun existsByRepositoryIdAndUserIdAndAcceptedTrue(repoId: Long, userId: Long): Boolean
     fun findAcceptedByUserId(userId: Long): List<Collaborator>
+    @Query("""
+    SELECT c FROM Collaborator c
+    WHERE c.user.id = :userId
+      AND c.repository.owner.id = :ownerId
+      AND c.accepted = true
+      AND c.repository.isDeleted = false
+    """)
+    fun findAcceptedByUserIdAndOwnerId(userId: Long, ownerId: Long): List<Collaborator>
+
 }

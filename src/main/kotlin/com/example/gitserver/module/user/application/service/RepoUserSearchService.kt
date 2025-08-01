@@ -1,4 +1,4 @@
-package com.example.gitserver.module.repository.application.service
+package com.example.gitserver.module.user.application.service
 
 import com.example.gitserver.module.repository.infrastructure.persistence.CollaboratorRepository
 import com.example.gitserver.module.repository.interfaces.dto.UserSearchResponse
@@ -7,7 +7,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 @Service
-class UserSearchService(
+class RepoUserSearchService(
     private val userRepository: UserRepository,
     private val collaboratorRepository: CollaboratorRepository
 ) {
@@ -21,7 +21,7 @@ class UserSearchService(
      */
     @Transactional
     fun searchUsers(repoId: Long, keyword: String): List<UserSearchResponse> {
-        val users = userRepository.findByEmailContainingOrNameContaining(keyword, keyword)
+        val users = userRepository.findByEmailContainingOrNameContainingAndIsDeletedFalse(keyword, keyword)
         val collaboratorIds = collaboratorRepository.findAllByRepositoryId(repoId)
             .map { it.user.id }.toSet()
 
