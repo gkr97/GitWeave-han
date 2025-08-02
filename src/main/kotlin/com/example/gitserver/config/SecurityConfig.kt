@@ -19,6 +19,7 @@ import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter
 import jakarta.servlet.http.HttpServletResponse
+import org.springframework.security.web.context.request.async.WebAsyncManagerIntegrationFilter
 
 @Configuration
 @EnableWebSecurity
@@ -29,13 +30,13 @@ class SecurityConfig(
     private val collaboratorRepository: CollaboratorRepository,
     private val commonCodeCacheService: CommonCodeCacheService,
     private val jwtProvider: JwtProvider,
-    private val userDetailsService: CustomUserDetailsService
+    private val userDetailsService: CustomUserDetailsService,
 ) {
 
     @Bean
     fun gitPatAuthenticationFilter(): GitPatAuthenticationFilter {
         return GitPatAuthenticationFilter(
-            userRepository, patRepository, repositoryRepository, collaboratorRepository, commonCodeCacheService
+            userRepository, patRepository, repositoryRepository, collaboratorRepository, commonCodeCacheService, userDetailsService
         )
     }
 
@@ -64,6 +65,7 @@ class SecurityConfig(
                         "/static/**",
                         "/webjars/**",
                         "/{ownerId}/{repo}.git/**",
+                        "/api/v1/repositories/*/download"
                     ).permitAll()
                     .anyRequest().authenticated()
             }
@@ -77,6 +79,7 @@ class SecurityConfig(
                         response.sendError(HttpServletResponse.SC_UNAUTHORIZED, authException.message)
                     }
             }
+            .addFilterBefore(WebAsyncManagerIntegrationFilter(), UsernamePasswordAuthenticationFilter::class.java)
             .addFilterBefore(gitPatAuthenticationFilter(), UsernamePasswordAuthenticationFilter::class.java)
             .addFilterBefore(jwtAuthenticationFilter(), UsernamePasswordAuthenticationFilter::class.java)
 

@@ -10,6 +10,9 @@ import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import mu.KLogging
 import org.springframework.security.authentication.BadCredentialsException
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
+import org.springframework.security.core.context.SecurityContextHolder
+import org.springframework.security.core.userdetails.UserDetailsService
 import org.springframework.stereotype.Component
 import org.springframework.web.filter.OncePerRequestFilter
 import java.security.MessageDigest
@@ -21,7 +24,8 @@ class GitPatAuthenticationFilter(
     private val patRepository: PersonalAccessTokenRepository,
     private val repositoryRepository: RepositoryRepository,
     private val collaboratorRepository: CollaboratorRepository,
-    private val commonCodeCacheService: CommonCodeCacheService
+    private val commonCodeCacheService: CommonCodeCacheService,
+    private val userDetailsService: UserDetailsService
 ) : OncePerRequestFilter() {
 
     private val log = KLogging().logger
@@ -115,6 +119,13 @@ class GitPatAuthenticationFilter(
 
         if (repo.owner.id == userId || collaboratorRepository.existsByRepositoryIdAndUserIdAndAcceptedTrue(repo.id, userId)) {
             log.info("접근 허용 - userId: {}, repoId: {}", userId, repo.id)
+            val user = userRepository.findByIdAndIsDeletedFalse(userId)
+                ?: throw BadCredentialsException("User not found")
+            val userDetails = userDetailsService.loadUserByUsername(user.email)
+            val authentication = UsernamePasswordAuthenticationToken(userDetails, null, userDetails.authorities)
+            SecurityContextHolder.getContext().authentication = authentication
+
+
             chain.doFilter(request, response)
             return
         }

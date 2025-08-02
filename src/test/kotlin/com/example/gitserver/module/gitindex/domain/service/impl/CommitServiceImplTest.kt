@@ -32,14 +32,15 @@ class CommitServiceImplTest {
          // given
          val repoId = 1L
          val commitHash = "abc123"
+         val branch = "main"
          val expectedTree = listOf(
              TreeNodeResponse("file1.txt", "blob", true, 100, "abc123"),
              TreeNodeResponse("dir1", "tree", false, 90, "def456"),
          )
-         whenever(treeQueryRepository.getFileTreeAtRoot(repoId, commitHash)).thenReturn(expectedTree)
+         whenever(treeQueryRepository.getFileTreeAtRoot(repoId, commitHash, branch)).thenReturn(expectedTree)
 
          // when
-         val result = commitService.getFileTreeAtRoot(repoId, commitHash)
+         val result = commitService.getFileTreeAtRoot(repoId, commitHash, branch)
 
          // then
          assertNotNull(result)
@@ -51,7 +52,7 @@ class CommitServiceImplTest {
     fun `getLatestCommitHash 정상 동작`() {
         // given
         val repositoryId = 1L
-        val branch = "main"
+        val branch = "refs/heads/main"
         val expectedCommit = CommitResponse(
             hash = "abc123",
             message = "testuser",

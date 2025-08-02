@@ -46,7 +46,7 @@ class ReadmeServiceImplTest {
     @Test
     fun `getReadmeContent 정상 반환`() {
         whenever(readmeQueryRepository.findReadmeBlobInfo(1L, "abc123")).thenReturn(Pair("README.md", "blobhash"))
-        whenever(blobReader.readBlobAsString(1L, "blobhash")).thenReturn("# Hello world")
+        whenever(blobReader.readBlobAsString( "blobhash")).thenReturn("# Hello world")
         val content = service.getReadmeContent(1L, "abc123")
         assertEquals("# Hello world", content)
     }
@@ -62,7 +62,7 @@ class ReadmeServiceImplTest {
     @Test
     fun `getReadmeContent - blobReader가 null이면 예외`() {
         whenever(readmeQueryRepository.findReadmeBlobInfo(1L, "abc123")).thenReturn(Pair("README.md", "blobhash"))
-        whenever(blobReader.readBlobAsString(1L, "blobhash")).thenReturn(null)
+        whenever(blobReader.readBlobAsString( "blobhash")).thenReturn(null)
         assertThrows(ReadmeLoadFailedException::class.java) {
             service.getReadmeContent(1L, "abc123")
         }
@@ -71,7 +71,7 @@ class ReadmeServiceImplTest {
     @Test
     fun `getReadmeHtml 정상 반환`() {
         whenever(readmeQueryRepository.findReadmeBlobInfo(1L, "abc123")).thenReturn(Pair("README.md", "blobhash"))
-        whenever(blobReader.readBlobAsString(1L, "blobhash")).thenReturn("# Hello")
+        whenever(blobReader.readBlobAsString("blobhash")).thenReturn("# Hello")
         val html = service.getReadmeHtml(1L, "abc123")
         assertTrue(html.contains("<h1>Hello</h1>") || html.contains("<h1>Hello</h1>\n")) // 환경에 따라 라인피드 포함 가능
     }

@@ -34,7 +34,7 @@ class BlobIndexerServiceImplTest {
         val repoId = 1L
         val tempDir = Files.createTempDirectory("testrepo")
 
-        whenever(userRepository.findByEmail(any())).thenReturn(null)
+        whenever(userRepository.findByEmailAndIsDeletedFalse(any())).thenReturn(null)
 
         // when & then
        assertThrows(GitRepositoryOpenException::class.java) {

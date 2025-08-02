@@ -5,7 +5,7 @@ import com.example.gitserver.module.common.dto.CommonCodeDetailResponse
 import com.example.gitserver.module.common.service.CommonCodeCacheService
 import com.example.gitserver.module.repository.application.command.CreateRepositoryCommand
 import com.example.gitserver.module.gitindex.domain.service.GitService
-import com.example.gitserver.module.repository.domain.event.RepositoryEventPublisher
+import com.example.gitserver.module.repository.domain.event.GitEventPublisher
 import com.example.gitserver.module.repository.exception.*
 import com.example.gitserver.module.repository.infrastructure.persistence.BranchRepository
 import com.example.gitserver.module.repository.infrastructure.persistence.CollaboratorRepository
@@ -27,7 +27,7 @@ class CreateRepositoryCommandHandlerTest {
     private val repositoryRepository = mock<RepositoryRepository>()
     private val branchRepository = mock<BranchRepository>()
     private val gitService = mock<GitService>()
-    private val repositoryEventPublisher = mock<RepositoryEventPublisher>()
+    private val repositoryEventPublisher = mock<GitEventPublisher>()
     private val commonCodeCacheService = mock<CommonCodeCacheService>()
     private val collaboratorRepository = mock<CollaboratorRepository>()
     private val userRepository = mock<UserRepository>()
@@ -74,7 +74,7 @@ class CreateRepositoryCommandHandlerTest {
     fun `저장소 생성`() {
         val command = defaultCommand(invitees = listOf(2L))
 
-        whenever(repositoryRepository.existsByOwnerIdAndName(1L, "test-repo")).thenReturn(false)
+        whenever(repositoryRepository.existsByOwnerIdAndNameAndIsDeletedFalse(1L, "test-repo")).thenReturn(false)
         whenever(commonCodeCacheService.getCodeDetailsOrLoad("VISIBILITY"))
             .thenReturn(listOf(CommonCodeDetailResponse(1L, "PUBLIC", "공개", 0, true)))
         whenever(commonCodeCacheService.getCodeDetailsOrLoad("ROLE"))
@@ -93,12 +93,12 @@ class CreateRepositoryCommandHandlerTest {
         verify(collaboratorRepository, times(2)).save(any()) // owner + invitee
 
         TransactionSynchronizationManager.getSynchronizations().forEach { it.afterCommit() }
-        verify(repositoryEventPublisher).publishRepositoryCreatedEvent(any())
+        verify(repositoryEventPublisher).publish(any())
     }
 
     @Test
     fun `중복 저장소명 예외`() {
-        whenever(repositoryRepository.existsByOwnerIdAndName(1L, "duplicate")).thenReturn(true)
+        whenever(repositoryRepository.existsByOwnerIdAndNameAndIsDeletedFalse(1L, "duplicate")).thenReturn(true)
 
         val command = defaultCommand(name = "duplicate")
 
@@ -109,7 +109,7 @@ class CreateRepositoryCommandHandlerTest {
 
     @Test
     fun `잘못된 코드 예외`() {
-        whenever(repositoryRepository.existsByOwnerIdAndName(any(), any())).thenReturn(false)
+        whenever(repositoryRepository.existsByOwnerIdAndNameAndIsDeletedFalse(any(), any())).thenReturn(false)
         whenever(commonCodeCacheService.getCodeDetailsOrLoad("VISIBILITY")).thenReturn(emptyList())
 
         val command = defaultCommand(visibility = "INVALID")
@@ -121,7 +121,7 @@ class CreateRepositoryCommandHandlerTest {
 
     @Test
     fun `헤드 커밋이 없을 경우 예외`() {
-        whenever(repositoryRepository.existsByOwnerIdAndName(any(), any())).thenReturn(false)
+        whenever(repositoryRepository.existsByOwnerIdAndNameAndIsDeletedFalse(any(), any())).thenReturn(false)
         whenever(commonCodeCacheService.getCodeDetailsOrLoad("VISIBILITY"))
             .thenReturn(listOf(CommonCodeDetailResponse(1L, "PUBLIC", "공개", 0, true)))
         whenever(commonCodeCacheService.getCodeDetailsOrLoad("ROLE"))
@@ -137,7 +137,7 @@ class CreateRepositoryCommandHandlerTest {
 
     @Test
     fun `초대 유저가 존재하지 않으면 예외`() {
-        whenever(repositoryRepository.existsByOwnerIdAndName(any(), any())).thenReturn(false)
+        whenever(repositoryRepository.existsByOwnerIdAndNameAndIsDeletedFalse(any(), any())).thenReturn(false)
         whenever(gitService.getHeadCommitHash(any(), any())).thenReturn("dummy-head")
         whenever(commonCodeCacheService.getCodeDetailsOrLoad("VISIBILITY"))
             .thenReturn(listOf(CommonCodeDetailResponse(1L, "PUBLIC", "공개", 0, true)))

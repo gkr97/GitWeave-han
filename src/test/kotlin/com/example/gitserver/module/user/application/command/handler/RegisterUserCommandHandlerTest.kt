@@ -34,7 +34,7 @@ class RegisterUserCommandHandlerTest {
             password = "plain-pw",
             name = "테스트"
         )
-        `when`(userRepository.existsByEmail(command.email)).thenReturn(false)
+        `when`(userRepository.existsByEmailAndIsDeletedFalse(command.email)).thenReturn(false)
         `when`(passwordEncoder.encode(command.password)).thenReturn("encoded-pw")
         `when`(userRepository.save(any<User>())).thenAnswer { it.getArgument<User>(0) }
 
@@ -58,7 +58,7 @@ class RegisterUserCommandHandlerTest {
             password = "pw",
             name = "중복"
         )
-        `when`(userRepository.existsByEmail(command.email)).thenReturn(true)
+        `when`(userRepository.existsByEmailAndIsDeletedFalse(command.email)).thenReturn(true)
         `when`(messageSourceAccessor.getMessage(any<String>())).thenReturn("이미 존재하는 이메일입니다.")
 
         // when
@@ -79,7 +79,7 @@ class RegisterUserCommandHandlerTest {
             password = "pw",
             name = "에러"
         )
-        `when`(userRepository.existsByEmail(command.email)).thenReturn(false)
+        `when`(userRepository.existsByEmailAndIsDeletedFalse(command.email)).thenReturn(false)
         `when`(passwordEncoder.encode(command.password)).thenReturn("encoded-pw")
         `when`(userRepository.save(any<User>())).thenThrow(RuntimeException("DB 오류"))
         `when`(messageSourceAccessor.getMessage(any<String>())).thenReturn("사용자 저장 실패")

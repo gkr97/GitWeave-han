@@ -33,7 +33,7 @@ class LoginUserCommandHandlerTest {
     @Test
     fun `로그인 성공시 유저 반환`() {
         val user = UserFixture.default(email = "user@a.com", passwordHash = "encoded-password")
-        whenever(userRepository.findByEmail("user@a.com")).thenReturn(user)
+        whenever(userRepository.findByEmailAndIsDeletedFalse("user@a.com")).thenReturn(user)
         whenever(passwordEncoder.matches("plain-pw", "encoded-password")).thenReturn(true)
 
         val command = LoginUserCommand("user@a.com", "plain-pw")
@@ -44,7 +44,7 @@ class LoginUserCommandHandlerTest {
 
     @Test
     fun `존재하지 않는 이메일로 로그인시 예외`() {
-        whenever(userRepository.findByEmail("notfound@a.com")).thenReturn(null)
+        whenever(userRepository.findByEmailAndIsDeletedFalse("notfound@a.com")).thenReturn(null)
         whenever(messageAccessor.getMessage(any<String>())).thenReturn("가입된 이메일이 없습니다.")
 
         val command = LoginUserCommand("notfound@a.com", "pw")
@@ -61,7 +61,7 @@ class LoginUserCommandHandlerTest {
     @Test
     fun `비밀번호 불일치시 예외`() {
         val user = UserFixture.default(email = "user@a.com", passwordHash = "encoded-pw")
-        whenever(userRepository.findByEmail("user@a.com")).thenReturn(user)
+        whenever(userRepository.findByEmailAndIsDeletedFalse("user@a.com")).thenReturn(user)
         whenever(passwordEncoder.matches("wrong", "encoded-pw")).thenReturn(false)
         whenever(messageAccessor.getMessage(any<String>())).thenReturn("비밀번호가 올바르지 않습니다.")
 
@@ -78,7 +78,7 @@ class LoginUserCommandHandlerTest {
     @Test
     fun `이메일 미인증시 예외`() {
         val user = UserFixture.default(email = "user@a.com", emailVerified = false)
-        whenever(userRepository.findByEmail("user@a.com")).thenReturn(user)
+        whenever(userRepository.findByEmailAndIsDeletedFalse("user@a.com")).thenReturn(user)
         whenever(passwordEncoder.matches(any(), any())).thenReturn(true)
         whenever(messageAccessor.getMessage(any<String>())).thenReturn("이메일 인증이 필요합니다.")
 

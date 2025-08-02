@@ -160,7 +160,7 @@ class PatServiceTest {
         val credentials = "${user.email}:$rawToken"
         val basicHeader = "Basic " + Base64.getEncoder().encodeToString(credentials.toByteArray())
 
-        whenever(userRepository.findByEmail(user.email)).thenReturn(user)
+        whenever(userRepository.findByEmailAndIsDeletedFalse(user.email)).thenReturn(user)
         whenever(personalAccessTokenRepository.findByUserIdAndTokenHashAndIsActiveTrue(user.id, tokenHash)).thenReturn(pat)
 
         // when
@@ -172,7 +172,7 @@ class PatServiceTest {
 
     @Test
     fun `resolveUserIdByAuthHeader 파싱 실패 또는 잘못된 토큰은 널을 주입`() {
-        whenever(userRepository.findByEmail("noone@email.com")).thenReturn(null)
+        whenever(userRepository.findByEmailAndIsDeletedFalse("noone@email.com")).thenReturn(null)
 
         val badHeader = "Basic " + Base64.getEncoder().encodeToString("noone@email.com:abc".toByteArray())
         val userId = patService.resolveUserIdByAuthHeader(badHeader)

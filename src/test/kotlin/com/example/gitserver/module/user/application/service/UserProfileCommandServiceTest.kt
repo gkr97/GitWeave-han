@@ -1,7 +1,10 @@
 package com.example.gitserver.module.user.application.service
 
 import com.example.gitserver.fixture.UserFixture
+import com.example.gitserver.module.common.dto.CommonCodeDetailResponse
+import com.example.gitserver.module.user.domain.UserRenameHistory
 import com.example.gitserver.module.user.exception.UserNotFoundException
+import com.example.gitserver.module.user.infrastructure.persistence.UserRenameHistoryRepository
 import com.example.gitserver.module.user.infrastructure.persistence.UserRepository
 import com.example.gitserver.module.user.infrastructure.s3.S3Uploader
 import org.junit.jupiter.api.BeforeEach
@@ -15,12 +18,14 @@ class UserProfileCommandServiceTest {
     private lateinit var userRepository: UserRepository
     private lateinit var s3Uploader: S3Uploader
     private lateinit var service: UserProfileCommandService
+    private lateinit var userRenameHistoryRepository: UserRenameHistoryRepository
 
     @BeforeEach
     fun setUp() {
         userRepository = mock()
         s3Uploader = mock()
-        service = UserProfileCommandService(userRepository, s3Uploader)
+        userRenameHistoryRepository = mock()
+        service = UserProfileCommandService(userRepository,userRenameHistoryRepository, s3Uploader)
     }
 
     @Test
@@ -31,14 +36,14 @@ class UserProfileCommandServiceTest {
         val imageUrl = "https://s3.example.com/user-profile-pictures/1/image.jpg"
         val user = UserFixture.default(id = userId)
 
-        whenever(userRepository.findByIdOrIdNull(userId)).thenReturn(user)
+        whenever(userRepository.findByIdAndIsDeletedFalse(userId)).thenReturn(user)
         whenever(s3Uploader.upload(imageFile, "user-profile-pictures/$userId")).thenReturn(imageUrl)
 
         // when
         val result = service.updateProfileImage(userId, imageFile)
 
         // then
-        verify(userRepository).findByIdOrIdNull(userId)
+        verify(userRepository).findByIdAndIsDeletedFalse(userId)
         verify(s3Uploader).upload(imageFile, "user-profile-pictures/$userId")
         assert(result == imageUrl)
         assert(user.profileImageUrl == imageUrl)
@@ -49,7 +54,7 @@ class UserProfileCommandServiceTest {
         // given
         val userId = 1234L
         val imageFile = mock<MultipartFile>()
-        whenever(userRepository.findByIdOrIdNull(userId)).thenReturn(null)
+        whenever(userRepository.findByIdAndIsDeletedFalse(userId)).thenReturn(null)
 
         // when & then
         assertThrows<UserNotFoundException> {
@@ -64,14 +69,14 @@ class UserProfileCommandServiceTest {
         val newName = "새이름"
         val user = UserFixture.default(id = userId)
 
-        whenever(userRepository.findByIdOrIdNull(userId)).thenReturn(user)
+        whenever(userRepository.findByIdAndIsDeletedFalse(userId)).thenReturn(user)
         whenever(userRepository.save(user)).thenReturn(user)
 
         // when
         service.updateName(userId, newName)
 
         // then
-        verify(userRepository).findByIdOrIdNull(userId)
+        verify(userRepository).findByIdAndIsDeletedFalse(userId)
         verify(userRepository).save(user)
         assert(user.name == newName)
     }
@@ -81,7 +86,7 @@ class UserProfileCommandServiceTest {
         // given
         val userId = 404L
         val newName = "없는유저"
-        whenever(userRepository.findByIdOrIdNull(userId)).thenReturn(null)
+        whenever(userRepository.findByIdAndIsDeletedFalse(userId)).thenReturn(null)
 
         // when & then
         assertThrows<UserNotFoundException> {

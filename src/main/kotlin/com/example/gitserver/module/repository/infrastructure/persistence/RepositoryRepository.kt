@@ -19,6 +19,8 @@ interface RepositoryRepository : JpaRepository<Repository, Long> {
 
     fun findByOwnerIdAndNameAndIsDeletedFalse(ownerId: Long, repoName: String): Repository?
 
+    fun findByIdAndIsDeletedFalse(id: Long): Repository?
+
     @Query("""
     SELECT r FROM Repository r
     JOIN FETCH r.owner
