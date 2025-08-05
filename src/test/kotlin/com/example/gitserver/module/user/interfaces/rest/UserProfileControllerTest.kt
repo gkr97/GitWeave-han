@@ -3,9 +3,9 @@ package com.example.gitserver.module.user.interfaces.rest
 import com.example.gitserver.common.jwt.GitPatAuthenticationFilter
 import com.example.gitserver.common.jwt.JwtAuthenticationFilter
 import com.example.gitserver.fixture.UserFixture
-import com.example.gitserver.module.user.application.service.UserProfileCommandService
+import com.example.gitserver.module.user.application.command.service.UserProfileCommandService
 import com.example.gitserver.module.user.domain.CustomUserDetails
-import com.example.gitserver.module.user.interfaces.rest.dto.UpdateNameRequest
+import com.example.gitserver.module.user.interfaces.dto.UpdateNameRequest
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any

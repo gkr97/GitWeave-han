@@ -1,11 +1,10 @@
 package com.example.gitserver.module.repository.application.query
 
 import com.example.gitserver.module.common.service.CommonCodeCacheService
-import com.example.gitserver.module.gitindex.domain.service.CommitService
-import com.example.gitserver.module.gitindex.domain.service.ReadmeService
+import com.example.gitserver.module.gitindex.application.service.CommitService
+import com.example.gitserver.module.gitindex.application.service.ReadmeService
 import com.example.gitserver.module.pullrequest.infrastructure.persistence.PullRequestRepository
-import com.example.gitserver.module.gitindex.domain.service.GitService
-import com.example.gitserver.module.repository.domain.Repository
+import com.example.gitserver.module.gitindex.application.service.GitService
 import com.example.gitserver.module.repository.exception.RepositoryAccessDeniedException
 import com.example.gitserver.module.repository.exception.RepositoryNotFoundException
 import com.example.gitserver.module.repository.infrastructure.persistence.*
@@ -51,7 +50,7 @@ class RepositoryQueryService(
     fun getRepositoryList(
         userId: Long,
         request: RepositoryListRequest
-    ): MyRepositoriesResult {
+    ): MyRepositoriesResponse {
         log.info { "[getRepositoryList] userId=$userId, request=$request 시작" }
 
         val sortProperty = when (request.sortBy) {
@@ -130,7 +129,7 @@ class RepositoryQueryService(
             profileImageUrl = user.profileImageUrl
         )
 
-        return MyRepositoriesResult(
+        return MyRepositoriesResponse(
             profile = profile,
             repositories = RepositoryListPageResponse(
                 content = content,
@@ -259,7 +258,18 @@ class RepositoryQueryService(
                 isDefault = it.name == repo.defaultBranch,
                 isProtected = it.isProtected,
                 createdAt = it.createdAt,
-                headCommit = enriched
+                headCommit = enriched,
+                creator = it.creator?.let { user ->
+                    RepositoryUserResponse(
+                        userId = user.id,
+                        nickname = user.name ?: "이름 없음",
+                        profileImageUrl = user.profileImageUrl
+                    )
+                } ?: RepositoryUserResponse(
+                    userId = 0L,
+                    nickname = "알 수 없음",
+                    profileImageUrl = null
+                )
             )
         }
 
@@ -398,7 +408,7 @@ class RepositoryQueryService(
                 )
             )
         }
-
+        //.... 반환
         return UserRepositoriesResult(
             profile = profile,
             repositories = UserRepositoryListPageResponse(

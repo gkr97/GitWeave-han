@@ -1,9 +1,9 @@
 package com.example.gitserver.module.gitindex.interfaces
 
 import com.example.gitserver.module.gitindex.domain.event.GitEvent
-import com.example.gitserver.module.gitindex.domain.service.impl.GitProtocolService
-import com.example.gitserver.module.repository.application.service.GitRepositorySyncService
-import com.example.gitserver.module.repository.application.service.RepositoryAccessService
+import com.example.gitserver.module.gitindex.application.service.impl.GitProtocolService
+import com.example.gitserver.module.repository.application.command.service.GitRepositorySyncService
+import com.example.gitserver.module.repository.application.query.RepositoryAccessQueryService
 import com.example.gitserver.module.repository.domain.event.GitEventPublisher
 import com.example.gitserver.module.repository.infrastructure.persistence.RepositoryRepository
 import com.example.gitserver.module.user.infrastructure.persistence.UserRepository
@@ -16,7 +16,7 @@ import jakarta.servlet.http.HttpServletResponse
 
 @RestController
 class JGitHttpController(
-    private val repoAccessService: RepositoryAccessService,
+    private val repoAccessService: RepositoryAccessQueryService,
     private val gitProtocolService: GitProtocolService,
     private val gitEventPublisher: GitEventPublisher,
     private val repositoryRepository: RepositoryRepository,
@@ -41,7 +41,7 @@ class JGitHttpController(
         val userId = resolveUserId(username)
         val authHeader = request.getHeader("Authorization")
         val access = repoAccessService.checkAccess(repo, userId, authHeader)
-        if (access !is RepositoryAccessService.AccessResult.Authorized) {
+        if (access !is RepositoryAccessQueryService.AccessResult.Authorized) {
             unauthorizedResponse(response)
             return null
         }
@@ -95,6 +95,8 @@ class JGitHttpController(
         response: HttpServletResponse
     ) {
         val userId = resolveUserId(username)
+        val userEntity = userRepository.findByIdAndIsDeletedFalse(userId)
+            ?: throw IllegalArgumentException("존재하지 않는 사용자: $username")
         val repository = openAuthorizedRepository(username, repo, request, response) ?: return
 
         val repoEntity = repositoryRepository.findByOwnerIdAndNameAndIsDeletedFalse(userId, repo)
@@ -107,7 +109,8 @@ class JGitHttpController(
                     repositoryId = repositoryId,
                     branchName = cmd.refName.removePrefix("refs/heads/"),
                     newHeadCommit = if (cmd.newId.name != "0000000000000000000000000000000000000000")
-                        cmd.newId.name else null
+                        cmd.newId.name else null,
+                    creatorUser = userEntity
                 )
                 gitEventPublisher.publish(
                     GitEvent(

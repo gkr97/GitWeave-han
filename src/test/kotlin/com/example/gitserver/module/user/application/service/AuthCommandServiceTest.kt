@@ -2,8 +2,9 @@ package com.example.gitserver.module.user.application.service
 
 import com.example.gitserver.common.jwt.JwtProvider
 import com.example.gitserver.module.user.application.command.LoginUserCommand
-import com.example.gitserver.module.user.application.command.RefreshTokenCommand
+import com.example.gitserver.module.user.application.command.service.RefreshTokenService
 import com.example.gitserver.module.user.application.command.handler.LoginUserCommandHandler
+import com.example.gitserver.module.user.application.command.service.AuthCommandService
 import com.example.gitserver.module.user.domain.User
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
@@ -13,12 +14,12 @@ import java.time.Instant
 class AuthCommandServiceTest {
 
     private val loginUserCommandHandler: LoginUserCommandHandler = mock()
-    private val refreshTokenCommand: RefreshTokenCommand = mock()
+    private val refreshTokenService: RefreshTokenService = mock()
     private val jwtProvider: JwtProvider = mock()
 
     private val authCommandService = AuthCommandService(
         loginUserCommandHandler,
-        refreshTokenCommand,
+        refreshTokenService,
         jwtProvider
     )
 
@@ -47,7 +48,7 @@ class AuthCommandServiceTest {
 
         verify(loginUserCommandHandler, times(1)).handle(command, ipAddress, userAgent)
         verify(jwtProvider, times(1)).generateToken(user.id, user.email)
-        verify(refreshTokenCommand, times(1)).save(
+        verify(refreshTokenService, times(1)).save(
             check {
                 assertEquals(user.id, it.userId)
                 assertEquals(refreshTokenValue, it.value)

@@ -6,7 +6,7 @@ import com.example.gitserver.module.user.domain.User
 import com.example.gitserver.module.user.infrastructure.persistence.EmailVerificationRepository
 import com.example.gitserver.module.user.infrastructure.persistence.UserRepository
 import com.example.gitserver.module.user.infrastructure.sqs.EmailVerificationProducer
-import com.example.gitserver.module.user.interfaces.rest.dto.EmailVerificationMessage
+import com.example.gitserver.module.user.interfaces.dto.EmailVerificationMessage
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.*
 import org.mockito.kotlin.any

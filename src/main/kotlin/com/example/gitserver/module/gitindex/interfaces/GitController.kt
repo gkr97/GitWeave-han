@@ -1,6 +1,6 @@
 package com.example.gitserver.module.gitindex.interfaces
 
-import com.example.gitserver.module.repository.application.service.RepositoryAccessService
+import com.example.gitserver.module.repository.application.query.RepositoryAccessQueryService
 import io.swagger.v3.oas.annotations.Operation
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
@@ -11,7 +11,7 @@ private val log = mu.KotlinLogging.logger {}
 
 @RestController
 class GitController(
-    private val repoAccessService: RepositoryAccessService,
+    private val repoAccessService: RepositoryAccessQueryService,
     @Value("\${git.http-backend-path}") private val gitHttpBackendPath: String,
     @Value("\${git.project-root-path}") private val gitProjectRootPath: String,
 ) {
@@ -43,7 +43,7 @@ class GitController(
         log.info("Access check result: repoName={}, ownerId={}, result={}", repoName, ownerId, access)
 
         when (access) {
-            is RepositoryAccessService.AccessResult.Authorized -> {
+            is RepositoryAccessQueryService.AccessResult.Authorized -> {
                 log.info("Authorized. Start git-http-backend for repo {}/{}", ownerId, repoName)
                 val env = buildGitBackendEnv(
                     request, ownerId, repoName, access.userId
@@ -93,15 +93,15 @@ class GitController(
                     response.sendError(500, "Internal Server Error")
                 }
             }
-            RepositoryAccessService.AccessResult.NotFound -> {
+            RepositoryAccessQueryService.AccessResult.NotFound -> {
                 log.warn("Repository not found: {}/{}", ownerId, repoName)
                 response.sendError(404)
             }
-            RepositoryAccessService.AccessResult.Unauthorized -> {
+            RepositoryAccessQueryService.AccessResult.Unauthorized -> {
                 log.warn("Unauthorized access attempt for repo: {}/{}", ownerId, repoName)
                 response.sendError(401)
             }
-            RepositoryAccessService.AccessResult.Forbidden -> {
+            RepositoryAccessQueryService.AccessResult.Forbidden -> {
                 log.warn("Forbidden access: {}/{}", ownerId, repoName)
                 response.sendError(403)
             }

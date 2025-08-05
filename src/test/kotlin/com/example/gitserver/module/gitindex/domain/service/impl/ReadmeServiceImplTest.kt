@@ -1,6 +1,6 @@
 package com.example.gitserver.module.gitindex.domain.service.impl
 
-import com.example.gitserver.module.gitindex.domain.service.impl.ReadmeServiceImpl
+import com.example.gitserver.module.gitindex.application.service.impl.ReadmeServiceImpl
 import com.example.gitserver.module.gitindex.exception.ReadmeLoadFailedException
 import com.example.gitserver.module.gitindex.exception.ReadmeNotFoundException
 import com.example.gitserver.module.gitindex.exception.ReadmeRenderException

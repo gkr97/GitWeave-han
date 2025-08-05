@@ -1,6 +1,6 @@
 package com.example.gitserver.module.repository.interfaces.graphql
 
-import com.example.gitserver.module.repository.application.service.RepositoryFileQueryService
+import com.example.gitserver.module.repository.application.query.RepositoryFileQueryService
 import com.example.gitserver.module.repository.interfaces.dto.FileContentResponse
 import com.example.gitserver.module.repository.interfaces.dto.TreeNodeResponse
 import com.example.gitserver.module.user.domain.CustomUserDetails

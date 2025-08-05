@@ -3,7 +3,7 @@ package com.example.gitserver.module.repository.application.query
 import com.example.gitserver.module.user.domain.User
 import com.example.gitserver.module.common.dto.CommonCodeDetailResponse
 import com.example.gitserver.module.common.service.CommonCodeCacheService
-import com.example.gitserver.module.gitindex.domain.service.impl.GitArchiveService
+import com.example.gitserver.module.gitindex.application.service.impl.GitArchiveService
 import com.example.gitserver.module.repository.domain.Repository
 import com.example.gitserver.module.repository.infrastructure.persistence.CollaboratorRepository
 import com.example.gitserver.module.repository.infrastructure.persistence.RepositoryRepository

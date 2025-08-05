@@ -63,4 +63,35 @@ class CommitQueryRepository(
             )
         )
     }
+
+    fun getCommitByHash(repositoryId: Long, commitHash: String): CommitResponse? {
+        val sk = "COMMIT#$commitHash"
+        return try {
+            val response = dynamoDbClient.getItem {
+                it.tableName(tableName)
+                    .key(
+                        mapOf(
+                            "PK" to AttributeValue.fromS("REPO#$repositoryId"),
+                            "SK" to AttributeValue.fromS(sk)
+                        )
+                    )
+            }
+            if (!response.hasItem()) return null
+            val item = response.item()
+            CommitResponse(
+                hash = commitHash,
+                message = item["message"]?.s() ?: "(no message)",
+                committedAt = item["committed_at"]?.s()?.let { LocalDateTime.parse(it, DateTimeFormatter.ISO_DATE_TIME) } ?: LocalDateTime.now(),
+                author = RepositoryUserResponse(
+                    userId = item["author_id"]?.n()?.toLongOrNull() ?: -1L,
+                    nickname = item["author_name"]?.s() ?: "unknown",
+                    profileImageUrl = item["author_profile_image_url"]?.s()
+                )
+            )
+        } catch (e: Exception) {
+            log.error(e) { "[getCommitByHash] DynamoDB 커밋 조회 실패 repoId=$repositoryId, commitHash=$commitHash" }
+            null
+        }
+    }
+
 }

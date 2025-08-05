@@ -11,10 +11,11 @@ class WebMvcConfig(
 ) : WebMvcConfigurer{
     override fun addCorsMappings(registry: CorsRegistry) {
         registry.addMapping("/**")
-            .allowedOrigins("*")
+            .allowedOrigins("http://localhost:8082", "http://localhost:3000, http://localhost:8080," +
+                    "electron://altair")
             .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
             .allowedHeaders("*")
-            .allowCredentials(false)
+            .allowCredentials(true)
     }
 
     override fun addResourceHandlers(registry: ResourceHandlerRegistry) {

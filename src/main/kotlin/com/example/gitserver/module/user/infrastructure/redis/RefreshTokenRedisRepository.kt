@@ -1,7 +1,7 @@
 package com.example.gitserver.module.user.infrastructure.redis
 
 
-import com.example.gitserver.module.user.application.command.RefreshTokenCommand
+import com.example.gitserver.module.user.application.command.service.RefreshTokenService
 import com.example.gitserver.module.user.application.query.RefreshTokenQuery
 import com.example.gitserver.module.user.domain.vo.RefreshToken
 import org.springframework.data.redis.core.StringRedisTemplate
@@ -14,7 +14,7 @@ private val logger = mu.KotlinLogging.logger {}
 @Repository
 class RefreshTokenRedisRepository(
     private val redisTemplate: StringRedisTemplate,
-) : RefreshTokenCommand, RefreshTokenQuery {
+) : RefreshTokenService, RefreshTokenQuery {
 
     /**
      * Redis에 RefreshToken을 저장합니다.

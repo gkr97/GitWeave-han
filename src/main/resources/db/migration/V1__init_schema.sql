@@ -54,6 +54,7 @@ CREATE TABLE `repository` (
 CREATE TABLE `branch` (
                           `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '브랜치 PK',
                           `repository_id` BIGINT NOT NULL COMMENT '저장소 PK',
+                          `creator_id` BIGINT NULL COMMENT '브랜치 생성자(유저) PK',
                           `name` VARCHAR(100) NOT NULL COMMENT '브랜치명',
                           `head_commit_hash` VARCHAR(40) NULL COMMENT 'HEAD 커밋 해시',
                           `is_protected` BOOLEAN NOT NULL DEFAULT 0 CHECK (`is_protected` IN (0,1)) COMMENT '보호여부',
@@ -62,7 +63,9 @@ CREATE TABLE `branch` (
                           `is_default` BOOLEAN NOT NULL DEFAULT 0 CHECK (`is_default` IN (0,1)) COMMENT '기본 브랜치 여부',
                           PRIMARY KEY (`id`),
                           KEY `idx_branch_repository_id` (`repository_id`),
-                          CONSTRAINT `fk_branch_repository_id` FOREIGN KEY (`repository_id`) REFERENCES `repository` (`id`)
+                          KEY `idx_branch_creator_id` (`creator_id`),
+                          CONSTRAINT `fk_branch_repository_id` FOREIGN KEY (`repository_id`) REFERENCES `repository` (`id`),
+                          CONSTRAINT `fk_branch_creator_id` FOREIGN KEY (`creator_id`) REFERENCES `user` (`id`)
 ) COMMENT='브랜치';
 
 CREATE TABLE `repository_bookmark` (

@@ -7,7 +7,7 @@ import com.example.gitserver.module.user.exception.EmailVerificationException
 import com.example.gitserver.module.user.infrastructure.persistence.EmailVerificationRepository
 import com.example.gitserver.module.user.infrastructure.persistence.UserRepository
 import com.example.gitserver.module.user.infrastructure.sqs.EmailVerificationProducer
-import com.example.gitserver.module.user.interfaces.rest.dto.EmailVerificationMessage
+import com.example.gitserver.module.user.interfaces.dto.EmailVerificationMessage
 import mu.KotlinLogging
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional

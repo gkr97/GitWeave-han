@@ -17,8 +17,11 @@ class CustomUserDetailsService(
      * @return UserDetails 객체
      * @throws UsernameNotFoundException 사용자를 찾을 수 없는 경우
      */
-    override fun loadUserByUsername(username: String?): UserDetails {
-        throw UnsupportedOperationException()
+    override fun loadUserByUsername(username: String?): CustomUserDetails {
+        if (username == null) throw UsernameNotFoundException("username이 null입니다")
+        val user = userRepository.findByEmailAndIsDeletedFalse(username)
+            ?: throw UsernameNotFoundException("사용자를 찾을 수 없습니다: $username")
+        return CustomUserDetails(user)
     }
     /**
      * 사용자 ID로 UserDetails를 로드합니다.

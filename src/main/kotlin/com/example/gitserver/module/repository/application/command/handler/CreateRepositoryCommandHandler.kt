@@ -3,7 +3,7 @@ package com.example.gitserver.module.repository.application.command.handler
 import com.example.gitserver.module.common.service.CommonCodeCacheService
 import com.example.gitserver.module.gitindex.domain.event.GitEvent
 import com.example.gitserver.module.repository.application.command.CreateRepositoryCommand
-import com.example.gitserver.module.gitindex.domain.service.GitService
+import com.example.gitserver.module.gitindex.application.service.GitService
 import com.example.gitserver.module.repository.domain.Branch
 import com.example.gitserver.module.repository.domain.Collaborator
 import com.example.gitserver.module.repository.domain.Repository
@@ -88,7 +88,7 @@ class CreateRepositoryCommandHandler(
             throw GitInitializationFailedException(repository.id)
         }
 
-        val branch = Branch.createDefault(repository, command.defaultBranch)
+        val branch = Branch.createDefault(repository, command.defaultBranch, command.owner)
 
         val headCommitHash = gitService.getHeadCommitHash(repository, command.defaultBranch)
             ?: throw HeadCommitNotFoundException(command.defaultBranch)
@@ -129,7 +129,6 @@ class CreateRepositoryCommandHandler(
                 log.info { "초대 collaborator 추가 완료: user=${user.id}" }
             }
         }
-
 
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {

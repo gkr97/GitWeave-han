@@ -40,6 +40,8 @@ interface RepositoryRepository : JpaRepository<Repository, Long> {
 
     @Query("SELECT r FROM Repository r WHERE r.owner.id = :ownerId AND r.visibilityCodeId = :visibilityCodeId AND r.isDeleted = false")
     fun findByOwnerIdAndVisibilityCodeIdAndIsDeletedFalse(ownerId: Long, visibilityCodeId: Long): List<Repository>
+
+    fun existsByOwnerIdAndNameAndIdNot(ownerId: Long, name: String, exceptId: Long): Boolean
 }
 
 

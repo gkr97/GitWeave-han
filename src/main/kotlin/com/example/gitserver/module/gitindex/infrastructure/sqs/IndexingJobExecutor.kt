@@ -1,7 +1,7 @@
 package com.example.gitserver.module.gitindex.infrastructure.sqs
 
 import com.example.gitserver.module.gitindex.domain.event.GitEvent
-import com.example.gitserver.module.gitindex.domain.service.BlobIndexer
+import com.example.gitserver.module.gitindex.application.service.BlobIndexer
 import org.springframework.stereotype.Service
 import java.nio.file.Path
 

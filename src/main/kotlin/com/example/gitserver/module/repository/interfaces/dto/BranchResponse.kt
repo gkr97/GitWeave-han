@@ -7,5 +7,6 @@ data class BranchResponse(
     val isDefault: Boolean,
     val isProtected: Boolean,
     val createdAt: LocalDateTime,
-    val headCommit: CommitResponse
+    val headCommit: CommitResponse,
+    val creator: RepositoryUserResponse,
 )

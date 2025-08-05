@@ -1,11 +1,12 @@
 package com.example.gitserver.module.gitindex.domain.service.impl
 
+import com.example.gitserver.module.gitindex.application.service.impl.GitIndexWriterServiceImpl
 import com.example.gitserver.module.gitindex.domain.Blob
 import com.example.gitserver.module.gitindex.domain.BlobTree
 import com.example.gitserver.module.gitindex.domain.Commit
-import com.example.gitserver.module.gitindex.infrastructure.dynamodb.BlobDynamoRepository
-import com.example.gitserver.module.gitindex.infrastructure.dynamodb.CommitDynamoRepository
-import com.example.gitserver.module.gitindex.infrastructure.dynamodb.TreeDynamoRepository
+import com.example.gitserver.module.gitindex.infrastructure.dynamodb.BlobCommandRepository
+import com.example.gitserver.module.gitindex.infrastructure.dynamodb.CommitCommandRepository
+import com.example.gitserver.module.gitindex.infrastructure.dynamodb.TreeCommandRepository
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.mock
@@ -13,9 +14,9 @@ import org.mockito.kotlin.verify
 
 class GitIndexWriterServiceImplTest {
 
-    private lateinit var commitRepo: CommitDynamoRepository
-    private lateinit var blobRepo: BlobDynamoRepository
-    private lateinit var treeRepo: TreeDynamoRepository
+    private lateinit var commitRepo: CommitCommandRepository
+    private lateinit var blobRepo: BlobCommandRepository
+    private lateinit var treeRepo: TreeCommandRepository
     private lateinit var service: GitIndexWriterServiceImpl
 
     @BeforeEach

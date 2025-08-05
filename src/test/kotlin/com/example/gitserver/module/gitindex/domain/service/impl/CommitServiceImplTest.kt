@@ -1,12 +1,12 @@
 package com.example.gitserver.module.gitindex.domain.service.impl
 
-import com.example.gitserver.module.gitindex.domain.service.CommitService
+import com.example.gitserver.module.gitindex.application.service.impl.CommitServiceImpl
+import com.example.gitserver.module.gitindex.application.service.CommitService
 import com.example.gitserver.module.gitindex.infrastructure.dynamodb.CommitQueryRepository
 import com.example.gitserver.module.gitindex.infrastructure.dynamodb.TreeQueryRepository
 import com.example.gitserver.module.repository.interfaces.dto.CommitResponse
 import com.example.gitserver.module.repository.interfaces.dto.RepositoryUserResponse
 import com.example.gitserver.module.repository.interfaces.dto.TreeNodeResponse
-import com.example.gitserver.module.user.application.service.JwtService
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.mockito.kotlin.mock

@@ -33,4 +33,12 @@ class CommonCodeCacheService(
         }
     }
 
+    @Transactional(readOnly = true)
+    fun getVisibilityCodeId(visibility: String): Long {
+        val details = getCodeDetailsOrLoad("VISIBILITY")
+        val codeDetail = details.find { it.code.equals(visibility, ignoreCase = true) }
+            ?: throw IllegalArgumentException("존재하지 않는 visibility: $visibility")
+        return codeDetail.id
+    }
+
 }

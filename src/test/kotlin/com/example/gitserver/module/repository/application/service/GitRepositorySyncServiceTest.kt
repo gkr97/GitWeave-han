@@ -1,5 +1,6 @@
 package com.example.gitserver.module.repository.application.service
 
+import com.example.gitserver.module.repository.application.command.service.GitRepositorySyncService
 import com.example.gitserver.module.repository.domain.Branch
 import com.example.gitserver.module.repository.domain.Repository
 import com.example.gitserver.module.repository.exception.RepositoryNotFoundException

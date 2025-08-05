@@ -1,0 +1,41 @@
+extend type Query {
+    repositoryBranches(
+        repositoryId: Long!
+        page: Int = 1
+        size: Int = 20
+        sortBy: BranchSortBy = LAST_COMMIT_AT
+        sortDirection: SortDirection = DESC
+        keyword: String
+        onlyMine: Boolean = false
+    ): BranchListPageResponse!
+}
+
+enum BranchSortBy {
+    NAME
+    LAST_COMMIT_AT
+}
+
+type BranchListPageResponse {
+    content: [BranchResponse!]!
+    page: Int!
+    size: Int!
+    totalElements: Int!
+    totalPages: Int!
+    hasNext: Boolean!
+}
+
+type BranchResponse {
+    name: String!
+    isDefault: Boolean!
+    isProtected: Boolean!
+    createdAt: String!
+    headCommit: CommitResponse!
+    creator: RepositoryUserResponse
+}
+
+type CommitResponse {
+    hash: String!
+    message: String!
+    committedAt: String!
+    author: RepositoryUserResponse!
+}

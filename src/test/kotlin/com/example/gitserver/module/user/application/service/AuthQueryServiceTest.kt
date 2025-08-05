@@ -1,7 +1,8 @@
 package com.example.gitserver.module.user.application.service
 
 import com.example.gitserver.common.jwt.JwtProvider
-import com.example.gitserver.module.user.application.command.RefreshTokenCommand
+import com.example.gitserver.module.user.application.command.service.RefreshTokenService
+import com.example.gitserver.module.user.application.query.AuthQueryService
 import com.example.gitserver.module.user.application.query.RefreshTokenQuery
 import com.example.gitserver.module.user.domain.vo.RefreshToken
 import com.example.gitserver.module.user.exception.AuthException
@@ -10,17 +11,16 @@ import org.junit.jupiter.api.Test
 import org.mockito.kotlin.*
 import org.springframework.http.HttpStatus
 import java.time.Instant
-import java.util.*
 
 class AuthQueryServiceTest {
 
     private val refreshTokenQuery: RefreshTokenQuery = mock()
-    private val refreshTokenCommand: RefreshTokenCommand = mock()
+    private val refreshTokenService: RefreshTokenService = mock()
     private val jwtProvider: JwtProvider = mock()
 
     private val authQueryService = AuthQueryService(
         refreshTokenQuery,
-        refreshTokenCommand,
+        refreshTokenService,
         jwtProvider
     )
 
@@ -44,7 +44,7 @@ class AuthQueryServiceTest {
         // then
         assertEquals(newAccessToken, accessToken)
         assertNotNull(refreshToken)
-        verify(refreshTokenCommand).save(
+        verify(refreshTokenService).save(
             check {
                 assertEquals(userId, it.userId)
                 assertEquals(refreshToken, it.value)

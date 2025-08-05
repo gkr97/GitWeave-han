@@ -1,8 +1,7 @@
 package com.example.gitserver.module.user.application.service
 
 import com.example.gitserver.fixture.UserFixture
-import com.example.gitserver.module.common.dto.CommonCodeDetailResponse
-import com.example.gitserver.module.user.domain.UserRenameHistory
+import com.example.gitserver.module.user.application.command.service.UserProfileCommandService
 import com.example.gitserver.module.user.exception.UserNotFoundException
 import com.example.gitserver.module.user.infrastructure.persistence.UserRenameHistoryRepository
 import com.example.gitserver.module.user.infrastructure.persistence.UserRepository

@@ -1,10 +1,15 @@
 package com.example.gitserver.module.repository.interfaces.dto
 
 import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
 
 data class CreateRepositoryRequest(
     @field:NotBlank(message = "저장소 이름은 필수입니다.")
+    @field:Pattern(
+        regexp = "^[a-zA-Z0-9._-]+$",
+        message = "저장소 이름에는 영문, 숫자, ., _, -만 사용할 수 있습니다."
+    )
     @field:Size(max = 100, message = "저장소 이름은 100자 이하만 허용됩니다.")
     val name: String,
 

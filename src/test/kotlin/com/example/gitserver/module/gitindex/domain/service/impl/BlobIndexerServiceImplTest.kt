@@ -1,6 +1,7 @@
 package com.example.gitserver.module.gitindex.domain.service.impl
 
-import com.example.gitserver.module.gitindex.domain.service.GitIndexWriter
+import com.example.gitserver.module.gitindex.application.service.GitIndexWriter
+import com.example.gitserver.module.gitindex.application.service.impl.BlobIndexerServiceImpl
 import com.example.gitserver.module.gitindex.exception.GitRepositoryOpenException
 import com.example.gitserver.module.gitindex.infrastructure.s3.S3BlobUploader
 import com.example.gitserver.module.user.infrastructure.persistence.UserRepository

@@ -4,7 +4,7 @@ import com.example.gitserver.fixture.UserFixture
 import com.example.gitserver.module.common.dto.CommonCodeDetailResponse
 import com.example.gitserver.module.common.service.CommonCodeCacheService
 import com.example.gitserver.module.repository.application.command.CreateRepositoryCommand
-import com.example.gitserver.module.gitindex.domain.service.GitService
+import com.example.gitserver.module.gitindex.application.service.GitService
 import com.example.gitserver.module.repository.domain.event.GitEventPublisher
 import com.example.gitserver.module.repository.exception.*
 import com.example.gitserver.module.repository.infrastructure.persistence.BranchRepository

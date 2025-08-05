@@ -1,15 +1,21 @@
 package com.example.gitserver.module.repository.interfaces.rest
 
-import com.example.gitserver.common.jwt.GitPatAuthenticationFilter
 import com.example.gitserver.common.response.ApiResponse
+import com.example.gitserver.module.repository.application.command.ChangeRepositoryVisibilityCommand
 import com.example.gitserver.module.repository.application.command.CreateRepositoryCommand
 import com.example.gitserver.module.repository.application.command.DeleteRepositoryCommand
+import com.example.gitserver.module.repository.application.command.UpdateRepositoryCommand
+import com.example.gitserver.module.repository.application.command.handler.ChangeRepoVisibilityCommandHandler
 import com.example.gitserver.module.repository.application.command.handler.CreateRepositoryCommandHandler
 import com.example.gitserver.module.repository.application.command.handler.DeleteRepositoryCommandHandler
+import com.example.gitserver.module.repository.application.command.handler.UpdateRepositoryCommandHandler
 import com.example.gitserver.module.repository.application.query.RepositoryDownloadQueryService
+import com.example.gitserver.module.repository.interfaces.dto.ChangeVisibilityRequest
 import com.example.gitserver.module.repository.interfaces.dto.CreateRepositoryRequest
 import com.example.gitserver.module.repository.interfaces.dto.RepositoryResponse
+import com.example.gitserver.module.repository.interfaces.dto.UpdateRepositoryRequest
 import com.example.gitserver.module.user.domain.CustomUserDetails
+import com.example.gitserver.module.user.exception.UserNotFoundException
 import com.example.gitserver.module.user.infrastructure.persistence.UserRepository
 import io.swagger.v3.oas.annotations.Operation
 import jakarta.validation.Valid
@@ -18,7 +24,6 @@ import org.springframework.http.ResponseEntity
 import org.springframework.security.concurrent.DelegatingSecurityContextRunnable
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.core.context.SecurityContextHolder
-import org.springframework.security.core.userdetails.UserDetails
 import org.springframework.web.bind.annotation.*
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody
 
@@ -27,9 +32,10 @@ import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBo
 class RepositoryRestController(
     private val createHandler: CreateRepositoryCommandHandler,
     private val deleteHandler: DeleteRepositoryCommandHandler,
+    private val updateRepositoryCommandHandler: UpdateRepositoryCommandHandler,
+    private val changeRepoVisibilityCommandHandler: ChangeRepoVisibilityCommandHandler,
     private val userRepository: UserRepository,
     private val repositoryDownloadQueryService: RepositoryDownloadQueryService,
-    private val gitPatAuthenticationFilter: GitPatAuthenticationFilter
 ) {
 
     private val logger = mu.KotlinLogging.logger {}
@@ -38,11 +44,11 @@ class RepositoryRestController(
     @PostMapping
     fun create(
         @Valid @RequestBody request: CreateRepositoryRequest,
-        @AuthenticationPrincipal userDetails: UserDetails
+        @AuthenticationPrincipal userDetails: CustomUserDetails
     ): ResponseEntity<ApiResponse<RepositoryResponse>> {
 
         val user = userRepository.findByEmailAndIsDeletedFalse(userDetails.username)
-            ?: throw IllegalArgumentException("인증된 사용자를 찾을 수 없습니다")
+            ?: throw UserNotFoundException(userDetails.getUserId())
 
         val command = CreateRepositoryCommand(
             owner = user,
@@ -82,6 +88,7 @@ class RepositoryRestController(
         )
     }
 
+    @Operation(summary = "Repository download")
     @GetMapping("/{repoId}/download")
     fun downloadRepository(
         @PathVariable repoId: Long,
@@ -116,7 +123,43 @@ class RepositoryRestController(
             .body(streamingBody)
     }
 
+    @Operation(summary = "Repository update")
+    @PatchMapping("/{repoId}")
+    fun update(
+        @PathVariable repoId: Long,
+        @Valid @RequestBody request: UpdateRepositoryRequest,
+        @AuthenticationPrincipal userDetails: CustomUserDetails
+    ): ResponseEntity<ApiResponse<String>> {
+        val command = UpdateRepositoryCommand(
+            repositoryId = repoId,
+            requesterId = userDetails.getUserId(),
+            newName = request.name,
+            newDescription = request.description
+        )
 
+        updateRepositoryCommandHandler.handle(command)
+        return ResponseEntity.ok(
+            ApiResponse.success(HttpStatus.OK.value(), "레포지터리 정보가 수정되었습니다.")
+        )
+    }
+
+    @Operation(summary = "Change repository visibility")
+    @PatchMapping("/{repoId}/visibility")
+    fun changeVisibility(
+        @PathVariable repoId: Long,
+        @Valid @RequestBody request: ChangeVisibilityRequest,
+        @AuthenticationPrincipal userDetails: CustomUserDetails
+    ): ResponseEntity<ApiResponse<String>> {
+        val command = ChangeRepositoryVisibilityCommand(
+            repositoryId = repoId,
+            requesterId = userDetails.getUserId(),
+            newVisibility = request.visibility
+        )
+        changeRepoVisibilityCommandHandler.handle(command)
+        return ResponseEntity.ok(
+            ApiResponse.success(HttpStatus.OK.value(), "가시성이 변경되었습니다.")
+        )
+    }
 
 
 

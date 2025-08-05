@@ -9,11 +9,11 @@ import com.example.gitserver.module.user.application.command.LoginUserCommand
 import com.example.gitserver.module.user.application.command.RegisterUserCommand
 import com.example.gitserver.module.user.application.command.handler.LoginUserCommandHandler
 import com.example.gitserver.module.user.application.command.handler.RegisterUserCommandHandler
-import com.example.gitserver.module.user.application.service.AuthCommandService
-import com.example.gitserver.module.user.application.service.AuthQueryService
+import com.example.gitserver.module.user.application.command.service.AuthCommandService
+import com.example.gitserver.module.user.application.query.AuthQueryService
 import com.example.gitserver.module.user.infrastructure.email.EmailVerifcationService
-import com.example.gitserver.module.user.interfaces.rest.dto.LoginRequest
-import com.example.gitserver.module.user.interfaces.rest.dto.RefreshRequest
+import com.example.gitserver.module.user.interfaces.dto.LoginRequest
+import com.example.gitserver.module.user.interfaces.dto.RefreshRequest
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any

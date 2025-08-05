@@ -8,7 +8,7 @@ type Query {
         sortBy: RepositorySortBy = lastUpdatedAt,
         sortDirection: SortDirection = DESC,
         keyword: String
-    ): MyRepositoriesResult!
+    ): MyRepositoriesResponse!
     userRepositories(
         userId: Long!
         page: Int = 1,
@@ -29,49 +29,6 @@ type Query {
         path: String!
         branch: String
     ): FileContentResponse!
-
-}
-
-type UserRepositoriesResult {
-    profile: RepositoryUserResponse!
-    repositories: UserRepositoryListPageResponse!
-}
-
-type UserRepositoryListPageResponse {
-    content: [RepositoryListItem!]!
-    page: Int!
-    size: Int!
-    totalElements: Int!
-    totalPages: Int!
-    hasNext: Boolean!
-}
-
-
-type MyRepositoriesResult {
-    profile: RepositoryUserResponse!
-    repositories: RepositoryListPageResponse!
-}
-
-type RepositoryListPageResponse {
-    content: [RepositoryListItem!]!
-    page: Int!
-    size: Int!
-    totalElements: Int!
-    totalPages: Int!
-    hasNext: Boolean!
-}
-
-type RepositoryListItem {
-    id: Long!
-    name: String!
-    description: String
-    visibility: String!
-    lastUpdatedAt: String
-    isOwner: Boolean!
-    isBookmarked: Boolean!
-    isInvited: Boolean!
-    ownerInfo: RepositoryUserResponse
-    language: String
 }
 
 enum RepositorySortBy {
@@ -106,6 +63,47 @@ type RepositoryResponse {
     fileTree: [TreeNodeResponse!]!
 }
 
+type RepositoryListItem {
+    id: Long!
+    name: String!
+    description: String
+    visibility: String!
+    lastUpdatedAt: String
+    isOwner: Boolean!
+    isBookmarked: Boolean!
+    isInvited: Boolean!
+    ownerInfo: RepositoryUserResponse
+    language: String
+}
+
+type UserRepositoriesResult {
+    profile: RepositoryUserResponse!
+    repositories: UserRepositoryListPageResponse!
+}
+
+type UserRepositoryListPageResponse {
+    content: [RepositoryListItem!]!
+    page: Int!
+    size: Int!
+    totalElements: Int!
+    totalPages: Int!
+    hasNext: Boolean!
+}
+
+type MyRepositoriesResponse {
+    profile: RepositoryUserResponse!
+    repositories: RepositoryListPageResponse!
+}
+
+type RepositoryListPageResponse {
+    content: [RepositoryListItem!]!
+    page: Int!
+    size: Int!
+    totalElements: Int!
+    totalPages: Int!
+    hasNext: Boolean!
+}
+
 type TreeNodeResponse {
     name: String!
     path: String!
@@ -129,12 +127,6 @@ type FileContentResponse {
     committer: RepositoryUserResponse
 }
 
-type RepositoryUserResponse {
-    userId: Long!
-    nickname: String!
-    profileImageUrl: String
-}
-
 type LanguageStatResponse {
     extension: String!
     language: String!
@@ -152,23 +144,8 @@ type ReadmeResponse {
     exists: Boolean!
     path: String!
     blobHash: String
-    content: String     #
+    content: String
     html: String
-}
-
-type BranchResponse {
-    name: String!
-    isDefault: Boolean!
-    isProtected: Boolean!
-    createdAt: String!
-    headCommit: CommitResponse!
-}
-
-type CommitResponse {
-    hash: String!
-    message: String!
-    committedAt: String!
-    author: RepositoryUserResponse!
 }
 
 type RepositoryStatsResponse {

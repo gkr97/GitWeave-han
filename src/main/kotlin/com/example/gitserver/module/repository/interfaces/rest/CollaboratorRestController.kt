@@ -3,7 +3,7 @@ package com.example.gitserver.module.repository.interfaces.rest
 import com.example.gitserver.common.response.ApiResponse
 import com.example.gitserver.module.repository.application.command.handler.CollaboratorCommandHandler
 import com.example.gitserver.module.repository.application.query.CollaboratorQueryService
-import com.example.gitserver.module.user.application.service.RepoUserSearchService
+import com.example.gitserver.module.user.application.query.RepoUserSearchService
 import com.example.gitserver.module.repository.interfaces.dto.CollaboratorResponse
 import com.example.gitserver.module.repository.interfaces.dto.UserSearchResponse
 import com.example.gitserver.module.user.infrastructure.persistence.UserRepository

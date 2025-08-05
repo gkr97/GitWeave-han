@@ -1,10 +1,10 @@
 package com.example.gitserver.module.user.interfaces.rest
 
 import com.example.gitserver.common.response.ApiResponse
-import com.example.gitserver.module.user.application.service.UserProfileCommandService
+import com.example.gitserver.module.user.application.command.service.UserProfileCommandService
 import com.example.gitserver.module.user.domain.CustomUserDetails
-import com.example.gitserver.module.user.interfaces.rest.dto.UpdateNameRequest
-import com.example.gitserver.module.user.interfaces.rest.dto.UserProfileResponse
+import com.example.gitserver.module.user.interfaces.dto.UpdateNameRequest
+import com.example.gitserver.module.user.interfaces.dto.UserProfileResponse
 import io.swagger.v3.oas.annotations.Operation
 import jakarta.validation.Valid
 import org.springframework.security.core.annotation.AuthenticationPrincipal
