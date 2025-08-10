@@ -1,5 +1,6 @@
 package com.example.gitserver.module.repository.application.command.service
 
+import com.example.gitserver.common.util.GitRefUtils
 import com.example.gitserver.module.gitindex.application.service.GitService
 import com.example.gitserver.module.repository.domain.Branch
 import com.example.gitserver.module.repository.infrastructure.persistence.BranchRepository
@@ -15,11 +16,9 @@ class BranchService(
     private val collaboratorRepository: CollaboratorRepository,
     private val gitService: GitService
 ) {
-
     /**
-     * 브랜치 목록을 조회합니다.
+     * 저장소의 모든 브랜치를 조회합니다.
      * @param repositoryId 저장소 ID
-     * @param pageable 페이지 정보
      * @return 브랜치 목록
      */
     @Transactional
@@ -33,12 +32,14 @@ class BranchService(
             throw IllegalAccessException("해당 저장소에 브랜치를 삭제할 권한이 없습니다.")
         }
 
-        if (repo.defaultBranch == branchName) {
-            throw IllegalArgumentException("기본 브랜치는 삭제할 수 없습니다: '$branchName'")
+        val incomingShort = GitRefUtils.toShortName(GitRefUtils.toFullRef(branchName))!!
+        if (repo.defaultBranch == incomingShort) {
+            throw IllegalArgumentException("기본 브랜치는 삭제할 수 없습니다: '$incomingShort'")
         }
 
-        val branch = branchRepository.findByRepositoryIdAndName(repositoryId, branchName)
-            ?: throw IllegalArgumentException("브랜치가 존재하지 않습니다: '$branchName'")
+        val fullRef = GitRefUtils.toFullRef(branchName)
+        val branch = branchRepository.findByRepositoryIdAndName(repositoryId, fullRef)
+            ?: throw IllegalArgumentException("브랜치가 존재하지 않습니다: '$incomingShort'")
 
         branchRepository.delete(branch)
 
@@ -50,10 +51,10 @@ class BranchService(
     }
 
     /**
-     * 브랜치를 생성합니다.
+     * 새로운 브랜치를 생성합니다.
      * @param repositoryId 저장소 ID
      * @param branchName 생성할 브랜치 이름
-     * @param sourceBranch 기준 브랜치 (null이면 기본 브랜치 사용)
+     * @param sourceBranch 기준 브랜치 이름 (null이면 기본 브랜치 사용)
      * @param requesterId 요청자 ID
      * @return 생성된 브랜치 ID
      */
@@ -68,26 +69,28 @@ class BranchService(
             throw IllegalAccessException("해당 저장소에 브랜치를 생성할 권한이 없습니다.")
         }
 
-        if (branchRepository.existsByRepositoryIdAndName(repositoryId, branchName)) {
-            throw IllegalArgumentException("이미 존재하는 브랜치 이름입니다: '$branchName'")
+        val fullRef = GitRefUtils.toFullRef(branchName)
+        if (branchRepository.existsByRepositoryIdAndName(repositoryId, fullRef)) {
+            throw IllegalArgumentException("이미 존재하는 브랜치 이름입니다: '${GitRefUtils.toShortName(fullRef)}'")
         }
 
-        val creator = repo.owner
-        val baseBranch = sourceBranch ?: repo.defaultBranch
-        val srcBranch = branchRepository.findByRepositoryIdAndName(repositoryId, baseBranch)
-            ?: throw IllegalArgumentException("기준 브랜치가 존재하지 않습니다: '$baseBranch'")
+        val baseShort = sourceBranch ?: repo.defaultBranch
+        val baseFull = GitRefUtils.toFullRef(baseShort)
+        val srcBranch = branchRepository.findByRepositoryIdAndName(repositoryId, baseFull)
+            ?: throw IllegalArgumentException("기준 브랜치가 존재하지 않습니다: '$baseShort'")
 
         try {
-            gitService.createBranch(repo, branchName, baseBranch)
+            gitService.createBranch(repo, branchName, baseShort)
         } catch (e: Exception) {
             throw RuntimeException("실제 저장소에서 브랜치 생성 실패: ${e.message}", e)
         }
 
         val branch = Branch(
             repository = repo,
-            name = branchName,
-            creator = creator,
+            name = fullRef,
+            creator = repo.owner,
             headCommitHash = srcBranch.headCommitHash,
+            lastCommitAt = srcBranch.lastCommitAt,
             isProtected = false,
             protectionRule = null,
             isDefault = false

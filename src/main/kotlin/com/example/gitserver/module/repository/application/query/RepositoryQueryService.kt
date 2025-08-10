@@ -11,12 +11,14 @@ import com.example.gitserver.module.repository.infrastructure.persistence.*
 import com.example.gitserver.module.repository.interfaces.dto.*
 import com.example.gitserver.module.user.exception.UserNotFoundException
 import com.example.gitserver.module.user.infrastructure.persistence.UserRepository
+import com.example.gitserver.common.util.GitRefUtils
 import mu.KotlinLogging
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.ZoneOffset
 import java.util.concurrent.StructuredTaskScope
 
 private val log = KotlinLogging.logger {}
@@ -36,16 +38,6 @@ class RepositoryQueryService(
     private val userRepository: UserRepository,
 ) {
 
-    /**
-     * 사용자 소속 저장소 목록을 조회합니다.
-     * - 본인이 소유한 저장소
-     * - 초대받은 저장소
-     * - 북마크한 저장소
-     *
-     * @param userId 사용자 ID
-     * @param request 페이지네이션 및 정렬 요청 정보
-     * @return 사용자 소속 저장소 목록
-     */
     @Transactional(readOnly = true)
     fun getRepositoryList(
         userId: Long,
@@ -140,19 +132,8 @@ class RepositoryQueryService(
                 hasNext = page.hasNext()
             )
         )
-
     }
 
-
-    /**
-     * 저장소 상세 정보를 조회합니다.
-     * - 저장소 소유자, 협업자, 북마크 여부 등 포함
-     *
-     * @param repoId 저장소 ID
-     * @param branch 조회할 브랜치 이름 (기본값: null -> default 브랜치)
-     * @param currentUserId 현재 사용자 ID (권한 체크용)
-     * @return 저장소 상세 정보
-     */
     @Transactional(readOnly = true)
     fun getRepository(repoId: Long, branch: String? = null, currentUserId: Long?): RepoDetailResponse {
         log.info { "[getRepository] repoId=$repoId, branch=${branch ?: "default"} 시작" }
@@ -173,12 +154,14 @@ class RepositoryQueryService(
             }
         }
 
-        val targetBranchName = branch ?: repo.defaultBranch
-        if (branchRepository.findByRepositoryIdAndName(repoId, targetBranchName) == null) {
+        val targetBranchShort = branch ?: repo.defaultBranch
+        val targetBranchFull = GitRefUtils.toFullRef(targetBranchShort)
+
+        if (branchRepository.findByRepositoryIdAndName(repoId, targetBranchFull) == null) {
             throw RepositoryNotFoundException(repoId)
         }
 
-        val rawCommit = commitService.getLatestCommitHash(repoId, targetBranchName)
+        val rawCommit = commitService.getLatestCommitHash(repoId, targetBranchFull)
             ?: throw RepositoryNotFoundException(repoId)
         val mainCommit = rawCommit.copy(author = enrichAuthor(rawCommit.author))
 
@@ -248,18 +231,20 @@ class RepositoryQueryService(
             html = readmeHtml
         )
 
-        val branches = branchRepository.findAllByRepositoryId(repoId).map {
-            val commit = commitService.getLatestCommitHash(repoId, it.name)
+        val branches = branchRepository.findAllByRepositoryId(repoId).map { entity ->
+            val short = GitRefUtils.toShortName(entity.name)!!
+            val commit = commitService.getLatestCommitHash(repoId, entity.name)
                 ?: throw RepositoryNotFoundException(repoId)
             val enriched = commit.copy(author = enrichAuthor(commit.author))
 
             BranchResponse(
-                name = it.name,
-                isDefault = it.name == repo.defaultBranch,
-                isProtected = it.isProtected,
-                createdAt = it.createdAt,
+                name = short,
+                qualifiedName = entity.name,
+                isDefault = (short == repo.defaultBranch),
+                isProtected = entity.isProtected,
+                createdAt = entity.createdAt,
                 headCommit = enriched,
-                creator = it.creator?.let { user ->
+                creator = entity.creator?.let { user ->
                     RepositoryUserResponse(
                         userId = user.id,
                         nickname = user.name ?: "이름 없음",
@@ -284,7 +269,7 @@ class RepositoryQueryService(
             )
         } ?: RepositoryStatsResponse(0, 0, 0, 0, 0, null)
 
-        val fileTree = commitService.getFileTreeAtRoot(repoId, mainCommit.hash, targetBranchName)
+        val fileTree = commitService.getFileTreeAtRoot(repoId, mainCommit.hash, targetBranchShort)
         val sortedFileTree = fileTree.sortedWith(
             compareBy<TreeNodeResponse>({ !it.isDirectory }, { it.name.lowercase() })
         )
@@ -354,12 +339,10 @@ class RepositoryQueryService(
         val privateCodeId = visibilityCodes.firstOrNull { it.code.equals("PRIVATE", true) }?.id
             ?: throw IllegalStateException("PRIVATE 코드가 없습니다.")
 
-        // 1. 공개 레포
         val publicIds = repositoryRepository
             .findByOwnerIdAndVisibilityCodeIdAndIsDeletedFalse(targetUserId, publicCodeId)
             .map { it.id }
 
-        // 2. 내가 초대 받은 비공개 레포
         val invitedPrivateIds = if (currentUserId != null) {
             collaboratorRepository.findAcceptedByUserIdAndOwnerId(currentUserId, targetUserId)
                 .map { it.repository }
@@ -369,7 +352,6 @@ class RepositoryQueryService(
 
         val allIds = (publicIds + invitedPrivateIds).distinct()
 
-        // 3. pageable 및 sort
         val sortProperty = when (request.sortBy) {
             "name" -> "name"
             else -> "updatedAt"
@@ -377,7 +359,6 @@ class RepositoryQueryService(
         val direction = if (request.sortDirection.equals("ASC", true)) Sort.Direction.ASC else Sort.Direction.DESC
         val pageable = PageRequest.of((request.page - 1).coerceAtLeast(0), request.size.coerceAtLeast(1), direction, sortProperty)
 
-        // 4. 검색/정렬/페이징을 DB에서 처리
         val page = if (!request.keyword.isNullOrBlank()) {
             repositoryRepository.findByIdInAndKeywordIgnoreCase(allIds, request.keyword, pageable)
         } else {
@@ -408,7 +389,6 @@ class RepositoryQueryService(
                 )
             )
         }
-        //.... 반환
         return UserRepositoriesResult(
             profile = profile,
             repositories = UserRepositoryListPageResponse(
@@ -421,7 +401,4 @@ class RepositoryQueryService(
             )
         )
     }
-
-
-
 }

@@ -2,6 +2,7 @@ package com.example.gitserver.module.gitindex.domain
 
 import com.example.gitserver.module.gitindex.domain.vo.CommitHash
 import com.example.gitserver.module.gitindex.domain.vo.TreeHash
+import java.time.Instant
 import java.time.LocalDateTime
 
 /**
@@ -14,12 +15,12 @@ data class Commit(
     val authorId: Long?,
     val authorName: String,
     val authorEmail: String,
-    val committedAt: java.time.Instant,
+    val committedAt: Instant,
     val committerName: String,
     val committerEmail: String,
     val treeHash: TreeHash,
     val parentHashes: List<String> = emptyList(),
     val isMerge: Boolean = false,
-    val createdAt: java.time.Instant,
+    val createdAt: Instant,
     val branch: String,
 )

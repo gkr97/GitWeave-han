@@ -26,6 +26,7 @@ type BranchListPageResponse {
 
 type BranchResponse {
     name: String!
+    qualifiedName: String!
     isDefault: Boolean!
     isProtected: Boolean!
     createdAt: String!

@@ -1,6 +1,9 @@
 package com.example.gitserver.module.repository.application.command.handler
 
+import com.example.gitserver.common.util.GitRefUtils
+import com.example.gitserver.common.util.GitRefUtils.toFullRef
 import com.example.gitserver.module.common.service.CommonCodeCacheService
+import com.example.gitserver.module.gitindex.application.service.CommitService
 import com.example.gitserver.module.gitindex.domain.event.GitEvent
 import com.example.gitserver.module.repository.application.command.CreateRepositoryCommand
 import com.example.gitserver.module.gitindex.application.service.GitService
@@ -18,6 +21,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionSynchronization
 import org.springframework.transaction.support.TransactionSynchronizationManager
+import java.time.ZoneOffset
 
 @Service
 class CreateRepositoryCommandHandler(
@@ -28,7 +32,9 @@ class CreateRepositoryCommandHandler(
     private val commonCodeCacheService: CommonCodeCacheService,
     private val collaboratorRepository: CollaboratorRepository,
     private val userRepository: UserRepository,
-) {
+    private val commitService: CommitService,
+
+    ) {
     private val log = KotlinLogging.logger {}
 
     /**
@@ -88,11 +94,19 @@ class CreateRepositoryCommandHandler(
             throw GitInitializationFailedException(repository.id)
         }
 
-        val branch = Branch.createDefault(repository, command.defaultBranch, command.owner)
+        val defaultBranchFullRef = toFullRef(command.defaultBranch)
 
-        val headCommitHash = gitService.getHeadCommitHash(repository, command.defaultBranch)
+        val branch = Branch.createDefault(repository, defaultBranchFullRef, command.owner)
+
+        val headCommitHash = gitService.getHeadCommitHash(repository, defaultBranchFullRef)
             ?: throw HeadCommitNotFoundException(command.defaultBranch)
         branch.updateHeadCommitHash(headCommitHash)
+
+        val headCommit = commitService.getCommitInfo(repository.id, headCommitHash)
+        branch.lastCommitAt = headCommit?.committedAt
+            ?.atOffset(ZoneOffset.UTC)
+            ?.toLocalDateTime()
+            ?: branch.createdAt
 
         branchRepository.save(branch)
         log.info { "기본 브랜치 생성 완료: ${branch.name}, HEAD=$headCommitHash" }
@@ -139,7 +153,8 @@ class CreateRepositoryCommandHandler(
                                 eventType = "REPO_CREATED",
                                 repositoryId = repository.id,
                                 ownerId = repository.owner.id,
-                                name = repository.name
+                                name = repository.name,
+                                branch = branch.name
                             )
                         )
                         log.info { "저장소 생성 이벤트 발행 완료: repositoryId=${repository.id}" }

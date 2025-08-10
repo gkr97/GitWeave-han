@@ -13,6 +13,11 @@ import org.eclipse.jgit.lib.Repository
 import org.springframework.web.bind.annotation.*
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
+import org.eclipse.jgit.revwalk.RevWalk
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.ZoneOffset
 
 @RestController
 class JGitHttpController(
@@ -105,13 +110,29 @@ class JGitHttpController(
 
         val hook = PostReceiveHook { _, commands ->
             commands.forEach { cmd ->
+                val zero = "0000000000000000000000000000000000000000"
+                val newHash = cmd.newId.name
+                val isDelete = (newHash == zero)
+
+                val committedAt: LocalDateTime? = if (!isDelete) {
+                    RevWalk(repository).use { rw ->
+                        val commit = rw.parseCommit(cmd.newId)
+                        LocalDateTime.ofInstant(
+                            Instant.ofEpochSecond(commit.commitTime.toLong()),
+                            ZoneId.systemDefault()
+                        )
+                    }
+                } else null
+
+
                 gitRepositorySyncService.syncBranch(
                     repositoryId = repositoryId,
-                    branchName = cmd.refName.removePrefix("refs/heads/"),
-                    newHeadCommit = if (cmd.newId.name != "0000000000000000000000000000000000000000")
-                        cmd.newId.name else null,
+                    branchName = cmd.refName,
+                    newHeadCommit = if (!isDelete) newHash else null,
+                    lastCommitAt = committedAt,
                     creatorUser = userEntity
                 )
+
                 gitEventPublisher.publish(
                     GitEvent(
                         eventType = "PUSH",

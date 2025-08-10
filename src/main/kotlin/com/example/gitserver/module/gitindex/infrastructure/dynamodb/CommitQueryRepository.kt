@@ -7,8 +7,9 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Repository
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue
+import java.time.Instant
 import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
+import java.time.ZoneOffset
 
 @Repository
 class CommitQueryRepository(
@@ -17,71 +18,89 @@ class CommitQueryRepository(
 ) {
     private val log = KotlinLogging.logger {}
 
+    private fun parseCommittedAt(raw: String?): Instant =
+        try {
+            if (raw.isNullOrBlank()) Instant.now() else Instant.parse(raw)
+        } catch (_: Exception) {
+            try {
+                LocalDateTime.parse(raw).atOffset(ZoneOffset.UTC).toInstant()
+            } catch (_: Exception) {
+                Instant.now()
+            }
+        }
+
     fun getLatestCommit(repositoryId: Long, branch: String): CommitResponse? {
         log.info { "[CommitQueryRepository] 최신 커밋 조회 시작 - repositoryId=$repositoryId, branch=$branch" }
 
-        val response = dynamoDbClient.query {
+        val resp = dynamoDbClient.query {
             it.tableName(tableName)
                 .indexName("GSI_Commits_By_Branch_And_Date")
-                .keyConditionExpression("branch = :branch")
-                .expressionAttributeValues(mapOf(":branch" to AttributeValue.fromS(branch)))
+                .keyConditionExpression("#branch = :branch")
+                .expressionAttributeNames(mapOf("#branch" to "branch", "#type" to "type"))
+                .filterExpression("PK = :pk AND #type = :commit")
+                .expressionAttributeValues(
+                    mapOf(
+                        ":branch" to AttributeValue.fromS(branch),
+                        ":pk" to AttributeValue.fromS("REPO#$repositoryId"),
+                        ":commit" to AttributeValue.fromS("commit"),
+                    )
+                )
                 .scanIndexForward(false)
-                .limit(10)
+                .limit(1)
         }
 
-        val item = response.items().firstOrNull {
-            it["type"]?.s() == "commit" && it["PK"]?.s() == "REPO#$repositoryId"
-        } ?: return null.also {
+        val item = resp.items().firstOrNull() ?: run {
             log.warn { "[CommitQueryRepository] 커밋 없음 - repositoryId=$repositoryId, branch=$branch" }
+            return null
         }
 
         val sk = item["SK"]?.s()
-        val skParts = sk?.split("#")
-        val commitHash = skParts?.getOrNull(1)
-        val branchInSK = skParts?.getOrNull(2)
-
+        val commitHash = sk?.split("#")?.getOrNull(1)
         if (commitHash.isNullOrBlank()) {
             log.error { "[CommitQueryRepository] 커밋 해시 파싱 실패 - SK=$sk" }
             return null
         }
-        if (branchInSK != null && branchInSK != branch) {
-            log.warn { "[CommitQueryRepository] SK의 branch와 입력 branch 불일치함 - SK=$sk, 파라미터=$branch" }
-        }
 
-        val committedAt = item["committed_at"]?.s()
-            ?.let { runCatching { LocalDateTime.parse(it, DateTimeFormatter.ISO_DATE_TIME) }.getOrNull() }
-            ?: LocalDateTime.now()
+        val committedAt = parseCommittedAt(item["committed_at"]?.s())
 
         return CommitResponse(
             hash = commitHash,
             message = item["message"]?.s() ?: "(no message)",
-            committedAt = committedAt,
+            committedAt = committedAt.atOffset(ZoneOffset.UTC).toLocalDateTime(),
             author = RepositoryUserResponse(
                 userId = item["author_id"]?.n()?.toLongOrNull() ?: -1L,
                 nickname = item["author_name"]?.s() ?: "unknown",
-                profileImageUrl = null
+                profileImageUrl = item["author_profile_image_url"]?.s()
             )
         )
     }
 
     fun getCommitByHash(repositoryId: Long, commitHash: String): CommitResponse? {
-        val sk = "COMMIT#$commitHash"
+        val pk = "REPO#$repositoryId"
+        val skPrefix = "COMMIT#$commitHash"
+
         return try {
-            val response = dynamoDbClient.getItem {
+            val response = dynamoDbClient.query {
                 it.tableName(tableName)
-                    .key(
+                    .keyConditionExpression("#pk = :pk AND begins_with(#sk, :sk)")
+                    .expressionAttributeNames(mapOf("#pk" to "PK", "#sk" to "SK"))
+                    .expressionAttributeValues(
                         mapOf(
-                            "PK" to AttributeValue.fromS("REPO#$repositoryId"),
-                            "SK" to AttributeValue.fromS(sk)
+                            ":pk" to AttributeValue.fromS(pk),
+                            ":sk" to AttributeValue.fromS(skPrefix)
                         )
                     )
+                    .limit(1)
             }
-            if (!response.hasItem()) return null
-            val item = response.item()
+
+            val item = response.items().firstOrNull() ?: return null
+
             CommitResponse(
                 hash = commitHash,
                 message = item["message"]?.s() ?: "(no message)",
-                committedAt = item["committed_at"]?.s()?.let { LocalDateTime.parse(it, DateTimeFormatter.ISO_DATE_TIME) } ?: LocalDateTime.now(),
+                committedAt = parseCommittedAt(item["committed_at"]?.s())
+                    .atOffset(ZoneOffset.UTC)
+                    .toLocalDateTime(),
                 author = RepositoryUserResponse(
                     userId = item["author_id"]?.n()?.toLongOrNull() ?: -1L,
                     nickname = item["author_name"]?.s() ?: "unknown",
@@ -93,5 +112,4 @@ class CommitQueryRepository(
             null
         }
     }
-
 }

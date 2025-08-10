@@ -57,6 +57,7 @@ CREATE TABLE `branch` (
                           `creator_id` BIGINT NULL COMMENT '브랜치 생성자(유저) PK',
                           `name` VARCHAR(100) NOT NULL COMMENT '브랜치명',
                           `head_commit_hash` VARCHAR(40) NULL COMMENT 'HEAD 커밋 해시',
+                          `last_commit_at` DATETIME NULL COMMENT '마지막 커밋 시각',
                           `is_protected` BOOLEAN NOT NULL DEFAULT 0 CHECK (`is_protected` IN (0,1)) COMMENT '보호여부',
                           `protection_rule` TEXT NULL COMMENT '브랜치 보호 규칙',
                           `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각',
@@ -64,6 +65,7 @@ CREATE TABLE `branch` (
                           PRIMARY KEY (`id`),
                           KEY `idx_branch_repository_id` (`repository_id`),
                           KEY `idx_branch_creator_id` (`creator_id`),
+                          KEY `idx_branch_last_commit_at` (`last_commit_at`),
                           CONSTRAINT `fk_branch_repository_id` FOREIGN KEY (`repository_id`) REFERENCES `repository` (`id`),
                           CONSTRAINT `fk_branch_creator_id` FOREIGN KEY (`creator_id`) REFERENCES `user` (`id`)
 ) COMMENT='브랜치';

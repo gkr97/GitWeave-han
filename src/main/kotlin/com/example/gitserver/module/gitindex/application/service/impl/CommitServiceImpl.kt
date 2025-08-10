@@ -1,5 +1,7 @@
 package com.example.gitserver.module.gitindex.application.service.impl
 
+import com.example.gitserver.common.util.GitRefUtils.toFullRef
+import com.example.gitserver.common.util.GitRefUtils.toFullRefOrNull
 import com.example.gitserver.module.gitindex.application.service.CommitService
 import com.example.gitserver.module.gitindex.infrastructure.dynamodb.CommitQueryRepository
 import com.example.gitserver.module.gitindex.infrastructure.dynamodb.TreeQueryRepository
@@ -14,27 +16,25 @@ class CommitServiceImpl(
     private val treeQueryRepository: TreeQueryRepository
 ) : CommitService {
 
+
     /**
      * 레포지토리의 루트 디렉토리에서 파일 트리를 가져옵니다.
-     * @param repoId 레포지토리 ID
-     * @param commitHash 커밋 해시
-     * @return 파일 트리 노드 리스트
      */
     @Transactional(readOnly = true)
-    override fun getFileTreeAtRoot(repoId: Long, commitHash: String, branch: String?): List<TreeNodeResponse> {
-        return treeQueryRepository.getFileTreeAtRoot(repoId, commitHash, branch)
+    override fun getFileTreeAtRoot(
+        repoId: Long,
+        commitHash: String,
+        branch: String?
+    ): List<TreeNodeResponse> {
+        return treeQueryRepository.getFileTreeAtRoot(repoId, commitHash, toFullRefOrNull(branch))
     }
 
     /**
-     * 마지막 커밋의 파일 트리를 가져옵니다.
-     * @param repoId 레포지토리 ID
-     * @param commitHash 커밋 해시
-     * @return 파일 트리 노드 리스트
+     * 마지막 커밋 정보를 가져옵니다.
      */
     @Transactional(readOnly = true)
     override fun getLatestCommitHash(repositoryId: Long, branch: String): CommitResponse? {
-        val branchFullName = if (branch.startsWith("refs/heads/")) branch else "refs/heads/$branch"
-        return commitQueryRepository.getLatestCommit(repositoryId, branchFullName)
+        return commitQueryRepository.getLatestCommit(repositoryId, toFullRef(branch))
     }
 
     @Transactional(readOnly = true)

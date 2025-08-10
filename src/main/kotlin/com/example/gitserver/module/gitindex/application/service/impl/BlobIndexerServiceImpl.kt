@@ -206,7 +206,7 @@ class BlobIndexerServiceImpl(
      * @param repositoryId 레포지토리 ID
      * @param commitHash 커밋 해시
      * @param treeId 트리 ID
-     * @param repo Git ���장소 객체
+     * @param repo Git 저장소 객체
      * @param parentPath 부모 디렉토리 경로
      * @param gitIndexWriter Git 인덱스 작성기
      * @param blobUploader S3 블롭 업로더
@@ -224,8 +224,10 @@ class BlobIndexerServiceImpl(
             addTree(treeId)
             isRecursive = false
         }
-        val semaphore = Semaphore(20)
-        val tasks = mutableListOf<Runnable>()
+
+        val maxConcurrency = 20
+        val semaphore = Semaphore(maxConcurrency)
+        val threads = mutableListOf<Thread>()
 
         while (treeWalk.next()) {
             val name = treeWalk.nameString
@@ -233,8 +235,9 @@ class BlobIndexerServiceImpl(
             val objectId = treeWalk.getObjectId(0)
 
             log.info { "[walkTree] name=$name, path=$path, parentPath=$parentPath, isSubtree=${treeWalk.isSubtree}, objectId=$objectId" }
+
             if (treeWalk.isSubtree) {
-                log.info { "[walkTree:DIR] 디렉토리 저장 준비 - name=$name, path=$path, depth=${path.count { it == '/' }}, parentPath=$parentPath" }
+                // 디렉토리 저장
                 val treeVo = BlobTree(
                     repositoryId = repositoryId,
                     commitHash = CommitHash(commitHash),
@@ -248,9 +251,9 @@ class BlobIndexerServiceImpl(
                     lastModifiedAt = Instant.now()
                 )
                 gitIndexWriter.saveTree(treeVo)
-
                 log.info { "[walkTree:DIR] 디렉토리 저장 완료 - path=$path, depth=${treeVo.depth}" }
 
+                // 재귀 호출
                 walkTree(
                     repositoryId = repositoryId,
                     commitHash = commitHash,
@@ -261,63 +264,97 @@ class BlobIndexerServiceImpl(
                     blobUploader = blobUploader
                 )
             } else {
-                log.info { "[walkTree:FILE] 파일 저장 준비 - name=$name, path=$path, depth=${path.count { it == '/' }}, parentPath=$parentPath, objectId=$objectId" }
-                val bytes = try {
-                    repo.open(objectId).bytes
-                } catch (e: Exception) {
-                    log.warn(e) { "오브젝트 로드 실패 - path=$path, objectId=$objectId" }
-                    continue
-                }
-                val hash = objectId.name
-                val extension = path.substringAfterLast('.', "")
-                val mimeType = bytes.detectMimeType()
-
-                tasks += Runnable {
-                    log.info { "[walkTree:FILE] 실제 파일 저장 시작 - path=$path, hash=$hash, depth=${path.count { it == '/' }}" }
+                semaphore.acquire()
+                val thread = Thread.startVirtualThread {
                     try {
-                        blobUploader.upload(hash, bytes)
+                        log.info { "[walkTree:FILE] 파일 저장 시작 - path=$path, depth=${path.count { it == '/' }}" }
 
-                        val blobVo = Blob(
-                            repositoryId = repositoryId,
-                            hash = BlobHash(hash),
-                            path = FilePath(path),
-                            extension = extension,
-                            mimeType = mimeType,
-                            isBinary = bytes.isBinaryFile(),
-                            fileSize = bytes.size.toLong(),
-                            lineCount = bytes.countLines(),
-                            externalStorageKey = "blobs/$hash",
-                            createdAt = Instant.now()
-                        )
-                        gitIndexWriter.saveBlob(blobVo)
+                        val loader = repo.open(objectId)
+                        val fileSize = loader.size
+                        val hash = objectId.name
+                        val extension = path.substringAfterLast('.', "")
 
-                        val treeVo = BlobTree(
-                            repositoryId = repositoryId,
-                            commitHash = CommitHash(commitHash),
-                            path = FilePath(path),
-                            name = name,
-                            isDirectory = false,
-                            fileHash = hash,
-                            size = bytes.size.toLong(),
-                            depth = path.count { it == '/' },
-                            fileTypeCodeId = null,
-                            lastModifiedAt = Instant.now()
-                        )
-                        gitIndexWriter.saveTree(treeVo)
+                        // 1. 파일 요량 체크
+                        if (fileSize > 100 * 1024 * 1024) {
+                            log.info { "[walkTree:FILE] 대용량 파일 감지(${fileSize} bytes) - 스트리밍 업로드 진행, 라인 수.바이너리 판별 생략" }
+                            loader.openStream().use { inputStream ->
+                                blobUploader.uploadStream(hash, inputStream, fileSize)
+                            }
 
-                        log.info { "[walkTree:FILE] 파일 저장 완료 - path=$path, depth=${treeVo.depth}, isDirectory=${treeVo.isDirectory}" }
+                            val blobVo = Blob(
+                                repositoryId = repositoryId,
+                                hash = BlobHash(hash),
+                                path = FilePath(path),
+                                extension = extension,
+                                mimeType = null,
+                                isBinary = true,
+                                fileSize = fileSize,
+                                lineCount = null,
+                                externalStorageKey = "blobs/$hash",
+                                createdAt = Instant.now()
+                            )
+                            gitIndexWriter.saveBlob(blobVo)
+
+                            val treeVo = BlobTree(
+                                repositoryId = repositoryId,
+                                commitHash = CommitHash(commitHash),
+                                path = FilePath(path),
+                                name = name,
+                                isDirectory = false,
+                                fileHash = hash,
+                                size = fileSize,
+                                depth = path.count { it == '/' },
+                                fileTypeCodeId = null,
+                                lastModifiedAt = Instant.now()
+                            )
+                            gitIndexWriter.saveTree(treeVo)
+                        } else {
+                            val bytes = loader.bytes
+                            val mimeType = bytes.detectMimeType()
+
+                            blobUploader.upload(hash, bytes)
+
+                            val blobVo = Blob(
+                                repositoryId = repositoryId,
+                                hash = BlobHash(hash),
+                                path = FilePath(path),
+                                extension = extension,
+                                mimeType = mimeType,
+                                isBinary = bytes.isBinaryFile(),
+                                fileSize = bytes.size.toLong(),
+                                lineCount = bytes.countLines(),
+                                externalStorageKey = "blobs/$hash",
+                                createdAt = Instant.now()
+                            )
+                            gitIndexWriter.saveBlob(blobVo)
+
+                            val treeVo = BlobTree(
+                                repositoryId = repositoryId,
+                                commitHash = CommitHash(commitHash),
+                                path = FilePath(path),
+                                name = name,
+                                isDirectory = false,
+                                fileHash = hash,
+                                size = bytes.size.toLong(),
+                                depth = path.count { it == '/' },
+                                fileTypeCodeId = null,
+                                lastModifiedAt = Instant.now()
+                            )
+                            gitIndexWriter.saveTree(treeVo)
+                        }
+
+                        log.info { "[walkTree:FILE] 파일 저장 완료 - path=$path" }
                     } catch (e: Exception) {
-                        log.warn(e) { "[walkTree] 파일 처리 실패 - path=$path, hash=$hash" }
+                        log.warn(e) { "[walkTree] 파일 처리 실패 - path=$path, objectId=$objectId" }
                     } finally {
                         semaphore.release()
                     }
                 }
+                threads += thread
             }
         }
-        tasks.forEach { task ->
-            semaphore.acquire()
-            Thread.startVirtualThread(task)
-        }
-        repeat(semaphore.availablePermits()) { semaphore.acquire() }
+
+        threads.forEach { it.join() }
     }
+
 }

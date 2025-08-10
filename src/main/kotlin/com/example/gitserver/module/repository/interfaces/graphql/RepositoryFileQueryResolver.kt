@@ -1,5 +1,6 @@
 package com.example.gitserver.module.repository.interfaces.graphql
 
+import com.example.gitserver.common.util.GitRefUtils
 import com.example.gitserver.module.repository.application.query.RepositoryFileQueryService
 import com.example.gitserver.module.repository.interfaces.dto.FileContentResponse
 import com.example.gitserver.module.repository.interfaces.dto.TreeNodeResponse
@@ -39,5 +40,4 @@ class RepositoryFileQueryResolver(
             repositoryId, commitHash, path, branch, user?.getUserId()
         )
     }
-
 }

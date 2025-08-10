@@ -25,6 +25,9 @@ data class Branch(
     @Column(name = "head_commit_hash", length = 40)
     var headCommitHash: String? = null,
 
+    @Column(name = "last_commit_at")
+    var lastCommitAt: LocalDateTime? = null,
+
     @Column(name = "is_protected", nullable = false)
     var isProtected: Boolean = false,
 

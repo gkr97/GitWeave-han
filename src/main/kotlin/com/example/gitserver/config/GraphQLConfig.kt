@@ -11,6 +11,7 @@ class GraphQLConfig {
     @Bean
     fun runtimeWiringConfigurer(): RuntimeWiringConfigurer = RuntimeWiringConfigurer {
         it.scalar(ExtendedScalars.GraphQLLong)
+        it.scalar(ExtendedScalars.DateTime)
     }
 
 }

@@ -13,7 +13,7 @@ type Query {
         userId: Long!
         page: Int = 1,
         size: Int = 10,
-        sortBy: RepositorySortBy = lastUpdatedAt,
+        sortBy: RepositorySortBy = updatedAt,
         sortDirection: SortDirection = DESC,
         keyword: String
     ): UserRepositoriesResult!
@@ -33,6 +33,7 @@ type Query {
 
 enum RepositorySortBy {
     lastUpdatedAt
+    updatedAt
     name
 }
 

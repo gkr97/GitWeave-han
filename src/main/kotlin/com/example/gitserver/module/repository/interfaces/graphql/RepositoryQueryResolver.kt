@@ -67,7 +67,7 @@ class RepositoryQueryResolver(
         val request = UserRepositoryListRequest(
             page = page ?: 1,
             size = size ?: 10,
-            sortBy = sortBy ?: "lastUpdatedAt",
+            sortBy = sortBy ?: "updatedAt",
             sortDirection = sortDirection ?: "DESC",
             keyword = keyword
         )
