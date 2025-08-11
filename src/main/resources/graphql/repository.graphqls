@@ -126,6 +126,8 @@ type FileContentResponse {
     commitMessage: String
     committedAt: String
     committer: RepositoryUserResponse
+    downloadUrl: String
+    expiresAt: String
 }
 
 type LanguageStatResponse {

@@ -5,6 +5,7 @@ import com.example.gitserver.common.util.GitRefUtils.toFullRefOrNull
 import com.example.gitserver.module.gitindex.application.service.CommitService
 import com.example.gitserver.module.gitindex.infrastructure.dynamodb.CommitQueryRepository
 import com.example.gitserver.module.gitindex.infrastructure.dynamodb.TreeQueryRepository
+import com.example.gitserver.module.gitindex.infrastructure.redis.GitIndexCache
 import com.example.gitserver.module.repository.interfaces.dto.CommitResponse
 import com.example.gitserver.module.repository.interfaces.dto.TreeNodeResponse
 import org.springframework.stereotype.Service
@@ -13,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional
 @Service
 class CommitServiceImpl(
     private val commitQueryRepository: CommitQueryRepository,
-    private val treeQueryRepository: TreeQueryRepository
+    private val cache: GitIndexCache,
 ) : CommitService {
 
 
@@ -26,7 +27,7 @@ class CommitServiceImpl(
         commitHash: String,
         branch: String?
     ): List<TreeNodeResponse> {
-        return treeQueryRepository.getFileTreeAtRoot(repoId, commitHash, toFullRefOrNull(branch))
+        return cache.getFileTreeAtRoot(repoId, commitHash, toFullRefOrNull(branch))
     }
 
     /**
@@ -39,6 +40,6 @@ class CommitServiceImpl(
 
     @Transactional(readOnly = true)
     override fun getCommitInfo(repositoryId: Long, commitHash: String): CommitResponse? {
-        return commitQueryRepository.getCommitByHash(repositoryId, commitHash)
+        return cache.getCommitByHash(repositoryId, commitHash)
     }
 }

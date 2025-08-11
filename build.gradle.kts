@@ -39,6 +39,7 @@ dependencies {
     // Kotlin
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
+    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")
 
     // DB & Validation
     runtimeOnly("com.mysql:mysql-connector-j")

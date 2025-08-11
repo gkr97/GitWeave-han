@@ -9,5 +9,7 @@ data class FileContentResponse(
     val commitHash: String? = null,
     val commitMessage: String? = null,
     val committedAt: String? = null,
-    val committer: RepositoryUserResponse? = null
+    val committer: RepositoryUserResponse? = null,
+    val downloadUrl: String? = null,
+    val expiresAt: String? = null
 )

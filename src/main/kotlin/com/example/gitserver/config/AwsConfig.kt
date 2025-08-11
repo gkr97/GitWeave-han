@@ -8,6 +8,8 @@ import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
 import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient
 import software.amazon.awssdk.services.s3.S3Client
+import software.amazon.awssdk.services.s3.S3Configuration
+import software.amazon.awssdk.services.s3.presigner.S3Presigner
 import software.amazon.awssdk.services.sqs.SqsClient
 import java.net.URI
 
@@ -23,6 +25,7 @@ class AwsConfig(
     @Value("\${dynamodb.region}") private val dynamoRegion: String,
     @Value("\${dynamodb.access-key}") private val dynamoAccessKey: String,
     @Value("\${dynamodb.secret-key}") private val dynamoSecretKey: String,
+    @Value("\${cloud.aws.s3.public-endpoint:}") private val s3PublicEndpoint: String?
 ) {
 
     @Bean
@@ -37,10 +40,24 @@ class AwsConfig(
     @Bean
     fun s3Client(): S3Client = S3Client.builder()
         .endpointOverride(URI.create(s3Endpoint))
-        .forcePathStyle(true)
         .region(Region.of(region))
         .credentialsProvider(
             StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKey, secretKey))
+        )
+        .serviceConfiguration(
+            S3Configuration.builder().pathStyleAccessEnabled(true).build()
+        )
+        .build()
+
+    @Bean
+    fun s3Presigner(): S3Presigner = S3Presigner.builder()
+        .endpointOverride(URI.create(s3Endpoint))
+        .region(Region.of(region))
+        .credentialsProvider(
+            StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKey, secretKey))
+        )
+        .serviceConfiguration(
+            S3Configuration.builder().pathStyleAccessEnabled(true).build()
         )
         .build()
 

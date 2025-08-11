@@ -14,6 +14,7 @@ import com.example.gitserver.module.repository.infrastructure.persistence.Reposi
 import com.example.gitserver.module.repository.interfaces.dto.FileContentResponse
 import com.example.gitserver.module.repository.interfaces.dto.TreeNodeResponse
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import java.util.Locale
 
@@ -32,7 +33,7 @@ class RepositoryFileQueryService(
      * 파일/폴더 트리 조회
      * commitHash가 없으면 branch(없으면  기본 브랜치)로 최신 커밋 해시를 가져옴
      */
-    @Transactional(readOnly = true)
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     fun getFileTree(
         repositoryId: Long,
         commitHash: String?,
@@ -50,7 +51,7 @@ class RepositoryFileQueryService(
      * 파일 콘텐츠 조회
      * commitHash가 없으면 branch(없으면 기본 브랜치)로 최신 커밋 해시를 가져옴
      */
-    @Transactional(readOnly = true)
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     fun getFileContent(
         repositoryId: Long,
         commitHash: String?,

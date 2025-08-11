@@ -2,6 +2,7 @@ package com.example.gitserver.module.gitindex.interfaces
 
 import com.example.gitserver.module.gitindex.domain.event.GitEvent
 import com.example.gitserver.module.gitindex.application.service.impl.GitProtocolService
+import com.example.gitserver.module.gitindex.infrastructure.redis.GitIndexEvictor
 import com.example.gitserver.module.repository.application.command.service.GitRepositorySyncService
 import com.example.gitserver.module.repository.application.query.RepositoryAccessQueryService
 import com.example.gitserver.module.repository.domain.event.GitEventPublisher
@@ -17,7 +18,6 @@ import org.eclipse.jgit.revwalk.RevWalk
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
-import java.time.ZoneOffset
 
 @RestController
 class JGitHttpController(
@@ -26,7 +26,8 @@ class JGitHttpController(
     private val gitEventPublisher: GitEventPublisher,
     private val repositoryRepository: RepositoryRepository,
     private val gitRepositorySyncService: GitRepositorySyncService,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val gitIndexEvictor: GitIndexEvictor
 ) {
 
     /**
@@ -144,6 +145,8 @@ class JGitHttpController(
                         newrev = cmd.newId.name
                     )
                 )
+
+                gitIndexEvictor.evictAllOfRepository(repositoryId)
             }
         }
         gitProtocolService.receivePack(repository, request, response, hook)
