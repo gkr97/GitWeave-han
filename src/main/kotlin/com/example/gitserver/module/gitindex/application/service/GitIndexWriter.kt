@@ -8,4 +8,5 @@ interface GitIndexWriter {
     fun saveCommit(commit: Commit)
     fun saveBlob(blob: Blob)
     fun saveTree(tree: BlobTree)
+    fun saveBlobAndTree(blob: Blob, tree: BlobTree)
 }

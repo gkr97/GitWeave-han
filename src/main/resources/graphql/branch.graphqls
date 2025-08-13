@@ -1,42 +1,55 @@
-    extend type Query {
-        repositoryBranches(
-            repositoryId: Long!
-            page: Int = 1
-            size: Int = 20
-            sortBy: BranchSortBy = LAST_COMMIT_AT
-            sortDirection: SortDirection = DESC
-            keyword: String
-            onlyMine: Boolean = false
-        ): BranchListPageResponse!
-    }
+extend type Query {
+    repositoryBranchesConnection(
+        repositoryId: Long!
+        first: Int
+        after: String
+        last: Int
+        before: String
+        sortBy: BranchSortBy = LAST_COMMIT_AT
+        sortDirection: SortDirection = DESC
+        keyword: String
+        onlyMine: Boolean = false
+    ): BranchResponseConnection!
+}
 
-    enum BranchSortBy {
-        NAME
-        LAST_COMMIT_AT
-    }
+enum BranchSortBy {
+    LAST_COMMIT_AT
+    NAME
+}
 
-    type BranchListPageResponse {
-        content: [BranchResponse!]!
-        page: Int!
-        size: Int!
-        totalElements: Int!
-        totalPages: Int!
-        hasNext: Boolean!
-    }
+type BranchEdge {
+    cursor: String!
+    node: BranchResponse!
+}
 
-    type BranchResponse {
-        name: String!
-        qualifiedName: String!
-        isDefault: Boolean!
-        isProtected: Boolean!
-        createdAt: String!
-        headCommit: CommitResponse!
-        creator: RepositoryUserResponse
-    }
+type BranchResponseConnection {
+    edges: [BranchEdge!]!
+    pageInfo: PageInfo!
+    totalCount: Int
+}
 
-    type CommitResponse {
-        hash: String!
-        message: String!
-        committedAt: String!
-        author: RepositoryUserResponse!
-    }
+type BranchListPageResponse {
+    content: [BranchResponse!]!
+    page: Int!
+    size: Int!
+    totalElements: Int!
+    totalPages: Int!
+    hasNext: Boolean!
+}
+
+type BranchResponse {
+    name: String!
+    qualifiedName: String!
+    isDefault: Boolean!
+    isProtected: Boolean!
+    createdAt: String!
+    headCommit: CommitResponse!
+    creator: RepositoryUserResponse
+}
+
+type CommitResponse {
+    hash: String!
+    message: String!
+    committedAt: String!
+    author: RepositoryUserResponse!
+}

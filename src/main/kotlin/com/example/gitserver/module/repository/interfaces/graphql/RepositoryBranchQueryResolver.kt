@@ -1,7 +1,11 @@
 package com.example.gitserver.module.repository.interfaces.graphql
 
+import com.example.gitserver.common.pagination.KeysetPaging
+import com.example.gitserver.common.pagination.PagingValidator
 import com.example.gitserver.module.repository.application.query.BranchQueryService
-import com.example.gitserver.module.repository.interfaces.dto.BranchListPageResponse
+import com.example.gitserver.module.repository.application.query.model.BranchResponseConnection
+import com.example.gitserver.module.repository.application.query.model.BranchSortBy
+import com.example.gitserver.common.pagination.SortDirection
 import com.example.gitserver.module.user.domain.CustomUserDetails
 import org.springframework.graphql.data.method.annotation.Argument
 import org.springframework.graphql.data.method.annotation.QueryMapping
@@ -12,28 +16,30 @@ import org.springframework.stereotype.Controller
 class RepositoryBranchQueryResolver(
     private val branchQueryService: BranchQueryService
 ) {
-
     @QueryMapping
-    fun repositoryBranches(
+    fun repositoryBranchesConnection(
         @Argument repositoryId: Long,
-        @Argument page: Int?,
-        @Argument size: Int?,
-        @Argument sortBy: String?,
-        @Argument sortDirection: String?,
+        @Argument first: Int?,
+        @Argument after: String?,
+        @Argument last: Int?,
+        @Argument before: String?,
+        @Argument sortBy: BranchSortBy?,
+        @Argument sortDirection: SortDirection?,
         @Argument keyword: String?,
         @Argument onlyMine: Boolean?,
         @AuthenticationPrincipal user: CustomUserDetails?
-    ): BranchListPageResponse {
-        return branchQueryService.getBranchList(
+    ): BranchResponseConnection {
+        val paging = KeysetPaging(first = first, after = after, last = last, before = before)
+        PagingValidator.validate(paging)
+
+        return branchQueryService.getBranchConnection(
             repositoryId = repositoryId,
-            page = page ?: 1,
-            size = size ?: 20,
-            sortBy = sortBy ?: "NAME",
-            sortDirection = sortDirection ?: "DESC",
+            paging = paging,
+            sortBy = (sortBy ?: BranchSortBy.LAST_COMMIT_AT).name,
+            sortDirection = (sortDirection ?: SortDirection.DESC).name,
             keyword = keyword,
             onlyMine = onlyMine ?: false,
             currentUserId = user?.getUserId()
         )
     }
 }
-

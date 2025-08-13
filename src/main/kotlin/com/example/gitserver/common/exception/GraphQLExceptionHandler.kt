@@ -1,5 +1,6 @@
 package com.example.gitserver.common.exception
 
+import graphql.ErrorClassification
 import graphql.GraphQLError
 import graphql.GraphqlErrorBuilder
 import graphql.schema.DataFetchingEnvironment
@@ -35,6 +36,6 @@ class GraphQLExceptionHandler : DataFetcherExceptionResolverAdapter() {
     }
 }
 
-enum class GraphQLCustomErrorType : graphql.ErrorClassification {
+enum class GraphQLCustomErrorType : ErrorClassification {
     BUSINESS
 }

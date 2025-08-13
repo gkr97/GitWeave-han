@@ -13,7 +13,6 @@ import mu.KotlinLogging
 import org.commonmark.parser.Parser
 import org.commonmark.renderer.html.HtmlRenderer
 import org.springframework.stereotype.Service
-import org.springframework.transaction.annotation.Transactional
 
 @Service
 class ReadmeServiceImpl(
@@ -30,7 +29,6 @@ class ReadmeServiceImpl(
      * @param commitHash 커밋 해시
      * @return ReadmeResponse 객체
      */
-    @Transactional(readOnly = true)
     override fun getReadmeInfo(repoId: Long, commitHash: String): ReadmeResponse {
         val result = readmeQueryRepository.findReadmeBlobInfo(repoId, commitHash)
         return ReadmeResponse(
@@ -48,7 +46,6 @@ class ReadmeServiceImpl(
      * @throws ReadmeNotFoundException README 파일이 존재하지 않을 경우
      * @throws ReadmeLoadFailedException S3에서 블롭을 읽는 데 실패한 경우
      */
-    @Transactional(readOnly = true)
     override fun getReadmeContent(repoId: Long, commitHash: String): String {
         val blobHash = getReadmeInfo(repoId, commitHash).blobHash
             ?: throw ReadmeNotFoundException(repoId, commitHash)
@@ -64,7 +61,6 @@ class ReadmeServiceImpl(
      * @return HTML로 렌더링된 README 내용
      * @throws ReadmeRenderException 마크다운 렌더링 중 오류가 발생한 경우
      */
-    @Transactional(readOnly = true)
     override fun getReadmeHtml(repoId: Long, commitHash: String): String {
         val content = getReadmeContent(repoId, commitHash)
         return try {
@@ -82,7 +78,6 @@ class ReadmeServiceImpl(
      * @param repositoryId 레포지토리 ID
      * @return 언어 통계 리스트
      */
-    @Transactional(readOnly = true)
     override fun getLanguageStats(repositoryId: Long): List<LanguageStatResponse> {
         val counts = blobQueryRepository.countBlobsByExtension(repositoryId)
         val total = counts.values.sum().takeIf { it > 0 } ?: return emptyList()

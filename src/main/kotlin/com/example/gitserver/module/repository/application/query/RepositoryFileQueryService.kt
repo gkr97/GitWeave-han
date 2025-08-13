@@ -5,9 +5,7 @@ import com.example.gitserver.module.common.service.CommonCodeCacheService
 import com.example.gitserver.module.gitindex.application.service.CommitService
 import com.example.gitserver.module.gitindex.application.service.impl.FileContentService
 import com.example.gitserver.module.gitindex.application.service.impl.FileTreeService
-import com.example.gitserver.module.repository.exception.InvalidVisibilityCodeException
-import com.example.gitserver.module.repository.exception.RepositoryAccessDeniedException
-import com.example.gitserver.module.repository.exception.RepositoryNotFoundException
+import com.example.gitserver.module.repository.exception.*
 import com.example.gitserver.module.repository.infrastructure.persistence.BranchRepository
 import com.example.gitserver.module.repository.infrastructure.persistence.CollaboratorRepository
 import com.example.gitserver.module.repository.infrastructure.persistence.RepositoryRepository
@@ -31,9 +29,10 @@ class RepositoryFileQueryService(
 
     /**
      * 파일/폴더 트리 조회
-     * commitHash가 없으면 branch(없으면  기본 브랜치)로 최신 커밋 해시를 가져옴
+     * - commitHash가 없으면 branch(없으면 기본 브랜치)로 최신 커밋 해시를 가져옴
+     * - 파일트리 조회 실패 시 도메인 예외로 래핑
      */
-    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    @Transactional(propagation = Propagation.NOT_SUPPORTED, readOnly = true)
     fun getFileTree(
         repositoryId: Long,
         commitHash: String?,
@@ -44,14 +43,19 @@ class RepositoryFileQueryService(
         checkFileTreePermission(repositoryId, userId)
 
         val effectiveHash = commitHash ?: resolveLatestCommitHash(repositoryId, branch)
-        return fileTreeService.getFileTree(repositoryId, effectiveHash, path, branch)
+        try {
+            return fileTreeService.getFileTree(repositoryId, effectiveHash, path, branch)
+        } catch (e: Exception) {
+            throw FileTreeQueryFailedException(repositoryId, branch ?: "(default)", effectiveHash, e)
+        }
     }
 
     /**
      * 파일 콘텐츠 조회
-     * commitHash가 없으면 branch(없으면 기본 브랜치)로 최신 커밋 해시를 가져옴
+     * - commitHash가 없으면 branch(없으면 기본 브랜치)로 최신 커밋 해시를 가져옴
+     * - 파일 콘텐츠 조회 실패 시 도메인 예외로 래핑
      */
-    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    @Transactional(propagation = Propagation.NOT_SUPPORTED, readOnly = true)
     fun getFileContent(
         repositoryId: Long,
         commitHash: String?,
@@ -62,7 +66,11 @@ class RepositoryFileQueryService(
         checkFileTreePermission(repositoryId, userId)
 
         val effectiveHash = commitHash ?: resolveLatestCommitHash(repositoryId, branch)
-        return fileContentService.getFileContent(repositoryId, effectiveHash, path, branch)
+        try {
+            return fileContentService.getFileContent(repositoryId, effectiveHash, path, branch)
+        } catch (e: Exception) {
+            throw FileContentQueryFailedException(repositoryId, branch ?: "(default)", path, effectiveHash, e)
+        }
     }
 
     /**
@@ -70,6 +78,7 @@ class RepositoryFileQueryService(
      * - branch가 null/blank면 저장소의 기본 브랜치 사용
      * - 짧은 이름/풀 레프 모두 허용
      * - 브랜치 존재 검증 포함
+     * - 커밋 미존재 시 HeadCommitNotFoundException
      */
     @Transactional(readOnly = true)
     fun resolveLatestCommitHash(repositoryId: Long, branch: String?): String {
@@ -77,21 +86,23 @@ class RepositoryFileQueryService(
             ?: throw RepositoryNotFoundException(repositoryId)
 
         val short = (branch?.let { GitRefUtils.toShortName(GitRefUtils.toFullRef(it)) } ?: repo.defaultBranch)
-
         val fullRef = GitRefUtils.toFullRef(short)
 
-        if (branchRepository.findByRepositoryIdAndName(repositoryId, fullRef) == null) {
-            throw RepositoryNotFoundException(repositoryId)
+        val exists = branchRepository.findByRepositoryIdAndName(repositoryId, fullRef) != null
+        if (!exists) {
+            throw BranchNotFoundException(repositoryId, fullRef)
         }
 
         val latest = commitService.getLatestCommitHash(repositoryId, fullRef)
-            ?: throw IllegalStateException("해당 브랜치에 커밋이 없습니다: $short")
+            ?: throw HeadCommitNotFoundException(short)
 
         return latest.hash
     }
 
     /**
      * 권한 체크: PRIVATE이면 소유자 또는 수락한 협업자만 접근 가능
+     * - VISIBILITY 코드 미조회 시 InvalidVisibilityCodeException
+     * - 권한 없으면 RepositoryAccessDeniedException
      */
     private fun checkFileTreePermission(repositoryId: Long, userId: Long?) {
         val repo = repositoryRepository.findByIdWithOwner(repositoryId)
@@ -104,12 +115,13 @@ class RepositoryFileQueryService(
 
         val visibility = visibilityCode.uppercase(Locale.ROOT)
         if (visibility == "PRIVATE") {
-            val isOwner = repo.owner.id == userId
-            val isCollaborator = userId?.let { collaboratorRepository.existsByRepositoryIdAndUserId(repositoryId, it) } ?: false
+            val isOwner = (repo.owner.id == userId)
+            val isCollaborator = userId?.let {
+                collaboratorRepository.existsByRepositoryIdAndUserId(repositoryId, it)
+            } ?: false
             if (!isOwner && !isCollaborator) {
                 throw RepositoryAccessDeniedException(repositoryId, userId)
             }
         }
     }
-
 }

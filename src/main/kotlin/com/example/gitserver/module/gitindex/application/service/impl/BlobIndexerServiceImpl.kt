@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service
 import java.nio.file.Path
 import java.time.Instant
 import java.util.concurrent.Semaphore
+import java.util.concurrent.atomic.AtomicInteger
 
 private val log = KotlinLogging.logger {}
 
@@ -33,27 +34,26 @@ class BlobIndexerServiceImpl(
 ) : BlobIndexer {
 
     /**
-     * Git 저장소를 인덱싱합니다.
-     * @param repositoryId 인덱싱할 저장소 ID
-     * @param workDir Git 저장소의 작업 디렉토리 경로
+     * 레포지토리의 HEAD 커밋을 인덱싱합니다.
+     * @param repositoryId 레포지토리 ID
+     * @param workDir 작업 디렉터리 경로
+     * @throws GitRepositoryOpenException 레포지토리 열기 실패
+     * @throws GitHeadNotFoundException HEAD 커밋을 찾을 수 없음
+     * @throws GitCommitParseException 커밋 파싱 실패
+     * @throws AuthorNotFoundException 작성자 정보가 없음
+     * @throws IndexingFailedException 파일 인덱싱 실패
      */
     override fun indexRepository(repositoryId: Long, workDir: Path) {
         log.info { "[indexRepository] 시작 - repositoryId=$repositoryId, workDir=$workDir" }
 
-        val git = try {
-            Git.open(workDir.toFile())
-        } catch (e: Exception) {
-            throw GitRepositoryOpenException(workDir.toString(), e)
-        }
+        val git = try { Git.open(workDir.toFile()) }
+        catch (e: Exception) { throw GitRepositoryOpenException(workDir.toString(), e) }
 
         git.use {
             RevWalk(it.repository).use { revWalk ->
                 val head = it.repository.resolve("HEAD") ?: throw GitHeadNotFoundException()
-                val commit = try {
-                    revWalk.parseCommit(head)
-                } catch (e: Exception) {
-                    throw GitCommitParseException(e)
-                }
+                val commit = try { revWalk.parseCommit(head) }
+                catch (e: Exception) { throw GitCommitParseException(e) }
 
                 val tree = commit.tree
                 val fullBranch = it.repository.fullBranch ?: "refs/heads/main"
@@ -77,10 +77,9 @@ class BlobIndexerServiceImpl(
                     createdAt = Instant.now(),
                     branch = fullBranch,
                 )
-                gitIndexWriter.saveCommit(commitVo)
-                log.info { "커밋 저장 완료 - hash=${commit.name}, author=${commit.authorIdent.name}" }
 
-                walkTree(
+                // 파일/디렉터리 인덱싱
+                val errors = walkTree(
                     repositoryId = repositoryId,
                     commitHash = commit.name,
                     treeId = tree.id,
@@ -90,30 +89,31 @@ class BlobIndexerServiceImpl(
                     blobUploader = blobUploader
                 )
 
+                if (errors == 0) {
+                    gitIndexWriter.saveCommit(commitVo)
+                    log.info { "[indexRepository] 커밋 저장 완료 - hash=${commit.name}" }
+                } else {
+                    log.warn { "[indexRepository] 파일 인덱싱 오류 ${errors}건 → 커밋 저장 건너뜀 - commit=${commit.name}" }
+                    throw IndexingFailedException(repositoryId, "파일 인덱싱 실패 건수=$errors")
+                }
+
                 log.info { "[indexRepository] 완료 - repositoryId=$repositoryId" }
             }
         }
     }
 
-    /**
-     * Git 이벤트를 처리하여 인덱싱합니다.
-     * @param event Git 이벤트 정보
-     * @param gitDir Git 저장소 디렉토리 경로
-     */
     override fun indexPush(event: GitEvent, gitDir: Path) {
-        log.info { "[indexPush] PUSH 이벤트 인덱싱 시작 - repoId=${event.repositoryId}, branch=${event.branch}, oldrev=${event.oldrev}, newrev=${event.newrev}" }
+        log.info { "[indexPush] 시작 - repoId=${event.repositoryId}," +
+                " branch=${event.branch}, oldrev=${event.oldrev}, newrev=${event.newrev}" }
         val repoDir = gitDir.toFile()
-        val git = try {
-            Git.open(repoDir)
-        } catch (e: Exception) {
-            throw GitRepositoryOpenException(repoDir.path, e)
-        }
+        val git = try { Git.open(repoDir) }
+        catch (e: Exception) { throw GitRepositoryOpenException(repoDir.path, e) }
 
         git.use {
             RevWalk(it.repository).use { revWalk ->
                 val oldId = event.oldrev?.let { ObjectId.fromString(it) }
                 val newId = event.newrev?.let { ObjectId.fromString(it) }
-                val EMPTY_COMMIT = "0000000000000000000000000000000000000000"
+                val EMPTY = "0000000000000000000000000000000000000000"
 
                 if (newId == null) {
                     log.warn { "[indexPush] newrev 없음" }
@@ -121,39 +121,22 @@ class BlobIndexerServiceImpl(
                 }
 
                 val commits = mutableListOf<RevCommit>()
-
-                if (event.oldrev == null || event.oldrev == EMPTY_COMMIT) {
+                if (event.oldrev == null || event.oldrev == EMPTY) {
                     revWalk.markStart(revWalk.parseCommit(newId))
-                    for (commit in revWalk) {
-                        commits += commit
-                    }
                 } else {
                     revWalk.markStart(revWalk.parseCommit(newId))
                     revWalk.markUninteresting(revWalk.parseCommit(oldId))
-                    for (commit in revWalk) {
-                        commits += commit
-                    }
                 }
+                for (c in revWalk) commits += c
+
                 log.info { "[indexPush] 인덱싱 대상 커밋 수: ${commits.size}" }
-                for (commit in commits) {
-                    indexSingleCommit(
-                        event.repositoryId,
-                        commit,
-                        it,
-                        event.branch ?: "main"
-                    )
+                for (c in commits) {
+                    indexSingleCommit(event.repositoryId, c, it, event.branch ?: "main")
                 }
             }
         }
     }
 
-    /**
-     * 단일 커밋을 인덱싱합니다.
-     * @param repositoryId 레포지토리 ID
-     * @param commit 인덱싱할 커밋
-     * @param git Git 객체
-     * @param branch 브랜치 이름
-     */
     private fun indexSingleCommit(
         repositoryId: Long,
         commit: RevCommit,
@@ -166,8 +149,6 @@ class BlobIndexerServiceImpl(
             log.warn { "[indexSingleCommit] authorId를 찾을 수 없음 - email=$authorEmail" }
             -1L
         }
-
-        log.info { "[indexSingleCommit] authorEmail=$authorEmail, authorId=$authorId" }
 
         val commitVo = Commit(
             repositoryId = repositoryId,
@@ -184,11 +165,8 @@ class BlobIndexerServiceImpl(
             createdAt = Instant.now(),
             branch = branch,
         )
-        gitIndexWriter.saveCommit(commitVo)
-        log.info { "[indexSingleCommit] 커밋 인덱싱 - hash=${commit.name}, author=${commit.authorIdent.name}" }
 
-        // 3.. 재귀 트리 순회
-        walkTree(
+        val errors = walkTree(
             repositoryId = repositoryId,
             commitHash = commit.name,
             treeId = tree.id,
@@ -198,18 +176,18 @@ class BlobIndexerServiceImpl(
             blobUploader = blobUploader
         )
 
-        log.info { "[indexSingleCommit] 완료 - commit=${commit.name}" }
+        if (errors == 0) {
+            gitIndexWriter.saveCommit(commitVo)
+            log.info { "[indexSingleCommit] 커밋 저장 완료 - hash=${commit.name}" }
+        } else {
+            log.warn { "[indexSingleCommit] 파일 인덱싱 오류 ${errors}건 → 커밋 저장 건너뜀 - commit=${commit.name}" }
+            throw IndexingFailedException(repositoryId, "파일 인덱싱 실패 건수=$errors")
+        }
     }
 
     /**
-     * 트리를 순회하며 파일과 디렉토리를 인덱싱합니다.
-     * @param repositoryId 레포지토리 ID
-     * @param commitHash 커밋 해시
-     * @param treeId 트리 ID
-     * @param repo Git 저장소 객체
-     * @param parentPath 부모 디렉토리 경로
-     * @param gitIndexWriter Git 인덱스 작성기
-     * @param blobUploader S3 블롭 업로더
+     * 트리를 순회하며 파일과 디렉토리를 인덱싱
+     * 반환: 실패 건수
      */
     private fun walkTree(
         repositoryId: Long,
@@ -219,7 +197,7 @@ class BlobIndexerServiceImpl(
         parentPath: String,
         gitIndexWriter: GitIndexWriter,
         blobUploader: S3BlobUploader
-    ) {
+    ): Int {
         val treeWalk = TreeWalk(repo).apply {
             addTree(treeId)
             isRecursive = false
@@ -228,6 +206,7 @@ class BlobIndexerServiceImpl(
         val maxConcurrency = 20
         val semaphore = Semaphore(maxConcurrency)
         val threads = mutableListOf<Thread>()
+        val errorCount = AtomicInteger(0)
 
         while (treeWalk.next()) {
             val name = treeWalk.nameString
@@ -237,7 +216,6 @@ class BlobIndexerServiceImpl(
             log.info { "[walkTree] name=$name, path=$path, parentPath=$parentPath, isSubtree=${treeWalk.isSubtree}, objectId=$objectId" }
 
             if (treeWalk.isSubtree) {
-                // 디렉토리 저장
                 val treeVo = BlobTree(
                     repositoryId = repositoryId,
                     commitHash = CommitHash(commitHash),
@@ -250,11 +228,14 @@ class BlobIndexerServiceImpl(
                     fileTypeCodeId = null,
                     lastModifiedAt = Instant.now()
                 )
-                gitIndexWriter.saveTree(treeVo)
-                log.info { "[walkTree:DIR] 디렉토리 저장 완료 - path=$path, depth=${treeVo.depth}" }
+                try {
+                    gitIndexWriter.saveTree(treeVo)
+                } catch (e: Exception) {
+                    log.warn(e) { "[walkTree:DIR] 디렉토리 저장 실패 - path=$path, objectId=$objectId" }
+                    errorCount.incrementAndGet()
+                }
 
-                // 재귀 호출
-                walkTree(
+                val childErrors = walkTree(
                     repositoryId = repositoryId,
                     commitHash = commitHash,
                     treeId = objectId,
@@ -263,25 +244,29 @@ class BlobIndexerServiceImpl(
                     gitIndexWriter = gitIndexWriter,
                     blobUploader = blobUploader
                 )
+                if (childErrors > 0) errorCount.addAndGet(childErrors)
             } else {
                 semaphore.acquire()
                 val thread = Thread.startVirtualThread {
                     try {
-                        log.info { "[walkTree:FILE] 파일 저장 시작 - path=$path, depth=${path.count { it == '/' }}" }
-
                         val loader = repo.open(objectId)
                         val fileSize = loader.size
                         val hash = objectId.name
                         val extension = path.substringAfterLast('.', "")
 
-                        // 1. 파일 요량 체크
+                        // 1) S3 업로드 먼저
                         if (fileSize > 100 * 1024 * 1024) {
-                            log.info { "[walkTree:FILE] 대용량 파일 감지(${fileSize} bytes) - 스트리밍 업로드 진행, 라인 수.바이너리 판별 생략" }
                             loader.openStream().use { inputStream ->
                                 blobUploader.uploadStream(hash, inputStream, fileSize)
                             }
+                        } else {
+                            val bytes = loader.bytes
+                            blobUploader.upload(hash, bytes)
+                        }
 
-                            val blobVo = Blob(
+                        // 2) 업로드 성공 후 VO 생성
+                        val blobVo = if (fileSize > 100 * 1024 * 1024) {
+                            Blob(
                                 repositoryId = repositoryId,
                                 hash = BlobHash(hash),
                                 path = FilePath(path),
@@ -293,28 +278,10 @@ class BlobIndexerServiceImpl(
                                 externalStorageKey = "blobs/$hash",
                                 createdAt = Instant.now()
                             )
-                            gitIndexWriter.saveBlob(blobVo)
-
-                            val treeVo = BlobTree(
-                                repositoryId = repositoryId,
-                                commitHash = CommitHash(commitHash),
-                                path = FilePath(path),
-                                name = name,
-                                isDirectory = false,
-                                fileHash = hash,
-                                size = fileSize,
-                                depth = path.count { it == '/' },
-                                fileTypeCodeId = null,
-                                lastModifiedAt = Instant.now()
-                            )
-                            gitIndexWriter.saveTree(treeVo)
                         } else {
-                            val bytes = loader.bytes
+                            val bytes = repo.open(objectId).bytes
                             val mimeType = bytes.detectMimeType()
-
-                            blobUploader.upload(hash, bytes)
-
-                            val blobVo = Blob(
+                            Blob(
                                 repositoryId = repositoryId,
                                 hash = BlobHash(hash),
                                 path = FilePath(path),
@@ -326,26 +293,27 @@ class BlobIndexerServiceImpl(
                                 externalStorageKey = "blobs/$hash",
                                 createdAt = Instant.now()
                             )
-                            gitIndexWriter.saveBlob(blobVo)
-
-                            val treeVo = BlobTree(
-                                repositoryId = repositoryId,
-                                commitHash = CommitHash(commitHash),
-                                path = FilePath(path),
-                                name = name,
-                                isDirectory = false,
-                                fileHash = hash,
-                                size = bytes.size.toLong(),
-                                depth = path.count { it == '/' },
-                                fileTypeCodeId = null,
-                                lastModifiedAt = Instant.now()
-                            )
-                            gitIndexWriter.saveTree(treeVo)
                         }
 
-                        log.info { "[walkTree:FILE] 파일 저장 완료 - path=$path" }
+                        val treeVo = BlobTree(
+                            repositoryId = repositoryId,
+                            commitHash = CommitHash(commitHash),
+                            path = FilePath(path),
+                            name = name,
+                            isDirectory = false,
+                            fileHash = hash,
+                            size = blobVo.fileSize,
+                            depth = path.count { it == '/' },
+                            fileTypeCodeId = null,
+                            lastModifiedAt = Instant.now()
+                        )
+
+                        // 3) Blob+Tree 원자 저장 하기
+                        gitIndexWriter.saveBlobAndTree(blobVo, treeVo)
+                        log.info { "[walkTree:FILE] 파일 저장 완료(atomic) - path=$path" }
                     } catch (e: Exception) {
-                        log.warn(e) { "[walkTree] 파일 처리 실패 - path=$path, objectId=$objectId" }
+                        log.warn(e) { "[walkTree:FILE] 처리 실패 - path=$path, objectId=$objectId" }
+                        errorCount.incrementAndGet()
                     } finally {
                         semaphore.release()
                     }
@@ -355,6 +323,6 @@ class BlobIndexerServiceImpl(
         }
 
         threads.forEach { it.join() }
+        return errorCount.get()
     }
-
 }

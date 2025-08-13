@@ -2,33 +2,50 @@ scalar Long
 
 type Query {
     repository(id: Long!, branch: String): RepositoryResponse!
-    myRepositories(
-        page: Int = 1,
-        size: Int = 10,
-        sortBy: RepositorySortBy = lastUpdatedAt,
-        sortDirection: SortDirection = DESC,
-        keyword: String
-    ): MyRepositoriesResponse!
-    userRepositories(
-        userId: Long!
-        page: Int = 1,
-        size: Int = 10,
-        sortBy: RepositorySortBy = updatedAt,
-        sortDirection: SortDirection = DESC,
-        keyword: String
-    ): UserRepositoriesResult!
+
     repositoryFileTree(
         repositoryId: Long!
         commitHash: String
         path: String
         branch: String
     ): [TreeNodeResponse!]!
+
     repositoryFileContent(
         repositoryId: Long!
         commitHash: String
         path: String!
         branch: String
     ): FileContentResponse!
+
+    myRepositoriesConnection(
+        first: Int
+        after: String
+        last: Int
+        before: String
+        sortBy: RepositorySortBy = lastUpdatedAt
+        sortDirection: SortDirection = DESC
+        keyword: String
+    ): RepositoryListItemConnection!
+
+    userRepositoriesConnection(
+        userId: Long!
+        first: Int
+        after: String
+        last: Int
+        before: String
+        sortBy: RepositorySortBy = updatedAt
+        sortDirection: SortDirection = DESC
+        keyword: String
+    ): RepositoryListItemConnection!
+}
+
+interface Node { id: ID! }
+
+type PageInfo {
+    hasNextPage: Boolean!
+    hasPreviousPage: Boolean!
+    startCursor: String
+    endCursor: String
 }
 
 enum RepositorySortBy {
@@ -40,6 +57,17 @@ enum RepositorySortBy {
 enum SortDirection {
     ASC
     DESC
+}
+
+type RepositoryListItemEdge {
+    cursor: String!
+    node: RepositoryListItem!
+}
+
+type RepositoryListItemConnection {
+    edges: [RepositoryListItemEdge!]!
+    pageInfo: PageInfo!
+    totalCount: Int
 }
 
 type RepositoryResponse {

@@ -1,6 +1,9 @@
 package com.example.gitserver.module.repository.interfaces.graphql
 
+import com.example.gitserver.common.pagination.KeysetPaging
+import com.example.gitserver.common.pagination.PagingValidator
 import com.example.gitserver.module.repository.application.query.RepositoryQueryService
+import com.example.gitserver.module.repository.application.query.model.RepositoryListItemConnection
 import com.example.gitserver.module.repository.interfaces.dto.*
 import com.example.gitserver.module.user.domain.CustomUserDetails
 import com.example.gitserver.module.user.exception.UserLoginException
@@ -22,62 +25,59 @@ class RepositoryQueryResolver(
         @Argument id: Long,
         @Argument branch: String?,
         @AuthenticationPrincipal user: CustomUserDetails?
-    ): RepoDetailResponse {
-        return repositoryQueryService.getRepository(id, branch, user?.getUserId())
-    }
+    ): RepoDetailResponse =
+        repositoryQueryService.getRepository(id, branch, user?.getUserId())
 
     @QueryMapping
-    fun myRepositories(
+    fun myRepositoriesConnection(
         @AuthenticationPrincipal user: CustomUserDetails?,
-        @Argument page: Int?,
-        @Argument size: Int?,
+        @Argument first: Int?,
+        @Argument after: String?,
+        @Argument last: Int?,
+        @Argument before: String?,
         @Argument sortBy: String?,
         @Argument sortDirection: String?,
         @Argument keyword: String?
-    ): MyRepositoriesResponse {
-        val userId = user?.getUserId() ?: throw UserLoginException("USER_NOT_LOGGED_IN", "사용자가 로그인하지 않았습니다.")
-        val request = RepositoryListRequest(
-            page = page ?: 1,
-            size = size ?: 10,
-            sortBy = sortBy ?: "lastUpdatedAt",
-            sortDirection = sortDirection ?: "DESC",
-            keyword = keyword
-        )
+    ): RepositoryListItemConnection {
+        val userId = user?.getUserId()
+            ?: throw UserLoginException("USER_NOT_LOGGED_IN", "사용자가 로그인하지 않았습니다.")
 
-        val errors = BeanPropertyBindingResult(request, "repositoryListRequest")
-        validator.validate(request, errors)
-        if (errors.hasErrors()) {
-            throw BindException(errors)
-        }
+        val paging = KeysetPaging(first = first, after = after, last = last, before = before)
+        PagingValidator.validate(paging)
 
-        return repositoryQueryService.getRepositoryList(userId, request)
-    }
-
-    @QueryMapping
-    fun userRepositories(
-        @Argument userId: Long,
-        @Argument page: Int?,
-        @Argument size: Int?,
-        @Argument sortBy: String?,
-        @Argument sortDirection: String?,
-        @Argument keyword: String?,
-        @AuthenticationPrincipal user: CustomUserDetails?
-    ): UserRepositoriesResult {
-        val currentUserId = user?.getUserId()
-        val request = UserRepositoryListRequest(
-            page = page ?: 1,
-            size = size ?: 10,
+        return repositoryQueryService.getMyRepositoriesConnection(
+            currentUserId = userId,
+            paging = paging,
             sortBy = sortBy ?: "updatedAt",
             sortDirection = sortDirection ?: "DESC",
             keyword = keyword
         )
+    }
 
-        val error = BeanPropertyBindingResult(request, "userRepositoryListRequest")
-        validator.validate(request, error)
-        if (error.hasErrors()) {
-            throw BindException(error)
-        }
+    @QueryMapping
+    fun userRepositoriesConnection(
+        @Argument userId: Long,
+        @Argument first: Int?,
+        @Argument after: String?,
+        @Argument last: Int?,
+        @Argument before: String?,
+        @Argument sortBy: String?,
+        @Argument sortDirection: String?,
+        @Argument keyword: String?,
+        @AuthenticationPrincipal user: CustomUserDetails?
+    ): RepositoryListItemConnection {
+        val currentUserId = user?.getUserId()
 
-        return repositoryQueryService.getUserRepositoryList(userId, currentUserId, request)
+        val paging = KeysetPaging(first = first, after = after, last = last, before = before)
+        PagingValidator.validate(paging)
+
+        return repositoryQueryService.getUserRepositoriesConnection(
+            targetUserId = userId,
+            currentUserId = currentUserId,
+            paging = paging,
+            sortBy = sortBy ?: "updatedAt",
+            sortDirection = sortDirection ?: "DESC",
+            keyword = keyword
+        )
     }
 }

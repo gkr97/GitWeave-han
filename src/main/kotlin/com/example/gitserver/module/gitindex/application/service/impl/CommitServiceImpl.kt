@@ -21,7 +21,6 @@ class CommitServiceImpl(
     /**
      * 레포지토리의 루트 디렉토리에서 파일 트리를 가져옵니다.
      */
-    @Transactional(readOnly = true)
     override fun getFileTreeAtRoot(
         repoId: Long,
         commitHash: String,
@@ -33,12 +32,13 @@ class CommitServiceImpl(
     /**
      * 마지막 커밋 정보를 가져옵니다.
      */
-    @Transactional(readOnly = true)
     override fun getLatestCommitHash(repositoryId: Long, branch: String): CommitResponse? {
         return commitQueryRepository.getLatestCommit(repositoryId, toFullRef(branch))
     }
 
-    @Transactional(readOnly = true)
+    /**
+     * 특정 커밋 해시의 정보를 가져옵니다.
+     */
     override fun getCommitInfo(repositoryId: Long, commitHash: String): CommitResponse? {
         return cache.getCommitByHash(repositoryId, commitHash)
     }

@@ -4,11 +4,13 @@ import com.example.gitserver.module.gitindex.infrastructure.dynamodb.BlobQueryRe
 import com.example.gitserver.module.gitindex.infrastructure.dynamodb.CommitQueryRepository
 import com.example.gitserver.module.gitindex.infrastructure.dynamodb.TreeQueryRepository
 import com.example.gitserver.module.repository.interfaces.dto.CommitResponse
+import org.springframework.cache.annotation.CacheConfig
 import org.springframework.cache.annotation.Cacheable
 import org.springframework.stereotype.Component
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue
 
 
+@CacheConfig(cacheManager = "cacheManager")
 @Component
 class GitIndexCache(
     private val commitQueryRepository: CommitQueryRepository,
@@ -19,9 +21,15 @@ class GitIndexCache(
     /**
      * 커밋 메타 — 키: repoId + commitHash
      */
-    @Cacheable(cacheNames = ["commitByHash"], key = "'c:'+#repositoryId+':'+#commitHash")
+    @Cacheable(cacheNames = ["commitByHash"], key = "'c:'+#repositoryId+':'+#commitHash", unless = "#result == null")
     fun getCommitByHash(repositoryId: Long, commitHash: String): CommitResponse? =
         commitQueryRepository.getCommitByHash(repositoryId, commitHash)
+
+
+    @Cacheable(cacheNames = ["commitRowByHash"], key = "'cr:'+#repositoryId+':'+#commitHash", unless = "#result == null")
+    fun getCommitItem(repositoryId: Long, commitHash: String, branch: String?): Map<String, AttributeValue>? =
+        treeQueryRepository.getCommitItem(repositoryId, commitHash, branch)
+
 
     /**
      * 루트 트리 — 키: repoId + commitHash + ":root"
@@ -36,13 +44,6 @@ class GitIndexCache(
     @Cacheable(cacheNames = ["treeByPath"], key = "'tp:'+#repositoryId+':'+#commitHash+':'+#path")
     fun getTreeItem(repositoryId: Long, commitHash: String, path: String) =
         treeQueryRepository.getTreeItem(repositoryId, commitHash, path)
-
-    /**
-     * 커밋 로우
-     */
-    @Cacheable(cacheNames = ["commitByHash"], key = "'cr:'+#repositoryId+':'+#commitHash")
-    fun getCommitItem(repositoryId: Long, commitHash: String, branch: String?): Map<String, AttributeValue>? =
-        treeQueryRepository.getCommitItem(repositoryId, commitHash, branch)
 
     /**
      * 블롭 메타 — 키: repoId + fileHash
