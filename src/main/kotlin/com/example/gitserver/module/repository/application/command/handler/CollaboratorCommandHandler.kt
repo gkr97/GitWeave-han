@@ -62,9 +62,7 @@ class CollaboratorCommandHandler(
         val collaborator = collaboratorRepository.findByRepositoryIdAndUserId(repoId, userId)
             ?: throw CollaboratorNotFoundException(repoId, userId)
 
-        if (collaborator.accepted) {
-            throw CollaboratorAlreadyInvitedException()
-        }
+        if (collaborator.accepted) { throw CollaboratorAlreadyAcceptedException() }
 
         collaborator.accepted = true
         log.info { "[Collaborator] 초대 수락 완료 - repoId=$repoId, userId=$userId" }
@@ -84,9 +82,7 @@ class CollaboratorCommandHandler(
         val repository = repositoryRepository.findById(repoId)
             .orElseThrow { RepositoryNotFoundException(repoId) }
 
-        if (repository.owner.id != requesterId) {
-            throw NotRepositoryOwnerException()
-        }
+        if (repository.owner.id != requesterId) { throw NotRepositoryOwnerException() }
 
         if (!collaboratorRepository.existsByRepositoryIdAndUserId(repoId, userId)) {
             throw CollaboratorNotFoundException(repoId, userId)

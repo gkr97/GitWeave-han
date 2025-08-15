@@ -14,6 +14,13 @@ class BlobCommandRepository(
 ) {
     private val log = KotlinLogging.logger {}
 
+    /**
+     * 블롭 정보를 DynamoDB에 저장합니다.
+     * - PK: REPO#<repositoryId>
+     * - SK: BLOB#<hash>
+     *
+     * @param blob 저장할 블롭 객체
+     */
     fun save(blob: Blob) {
         log.info { "[saveBlob] 저장 시작: repoId=${blob.repositoryId}, hash=${blob.hash.value}" }
 

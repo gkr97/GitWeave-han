@@ -29,6 +29,12 @@ class CommitQueryRepository(
             }
         }
 
+    /**
+     * 레포지토리의 최신 커밋을 조회합니다.
+     * @param repositoryId 레포지토리 ID
+     * @param branch 브랜치 이름
+     * @return CommitResponse 객체 또는 null (존재하지 않는 경우)
+     */
     fun getLatestCommit(repositoryId: Long, branch: String): CommitResponse? {
         log.info { "[CommitQueryRepository] 최신 커밋 조회 시작 - repositoryId=$repositoryId, branch=$branch" }
 
@@ -75,6 +81,12 @@ class CommitQueryRepository(
         )
     }
 
+    /**
+     * 특정 커밋 해시의 정보를 조회합니다.
+     * @param repositoryId 레포지토리 ID
+     * @param commitHash 커밋 해시
+     * @return CommitResponse 객체 또는 null (존재하지 않는 경우)
+     */
     fun getCommitByHash(repositoryId: Long, commitHash: String): CommitResponse? {
         val pk = "REPO#$repositoryId"
         val skPrefix = "COMMIT#$commitHash"
@@ -110,6 +122,37 @@ class CommitQueryRepository(
         } catch (e: Exception) {
             log.error(e) { "[getCommitByHash] DynamoDB 커밋 조회 실패 repoId=$repositoryId, commitHash=$commitHash" }
             null
+        }
+    }
+
+    /**
+     * 특정 커밋 해시가 존재하는지 확인합니다.
+     * @param repositoryId 레포지토리 ID
+     * @param commitHash 커밋 해시
+     * @return 존재 여부
+     */
+    fun existsCommit(repositoryId: Long, commitHash: String): Boolean {
+        val pk = "REPO#$repositoryId"
+        val skPrefix = "COMMIT#$commitHash#"
+
+        return try {
+            val resp = dynamoDbClient.query {
+                it.tableName(tableName)
+                    .keyConditionExpression("#pk = :pk AND begins_with(#sk, :sk)")
+                    .expressionAttributeNames(mapOf("#pk" to "PK", "#sk" to "SK"))
+                    .expressionAttributeValues(
+                        mapOf(
+                            ":pk" to AttributeValue.fromS(pk),
+                            ":sk" to AttributeValue.fromS(skPrefix)
+                        )
+                    )
+                    .limit(1)
+                    .consistentRead(true)
+            }
+            (resp.count() ?: 0) > 0
+        } catch (e: Exception) {
+            log.error(e) { "[existsCommit] DynamoDB 조회 실패 repoId=$repositoryId, commitHash=$commitHash" }
+            false
         }
     }
 }

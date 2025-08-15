@@ -10,8 +10,6 @@ import com.example.gitserver.module.repository.infrastructure.persistence.Branch
 import com.example.gitserver.module.repository.infrastructure.persistence.RepositoryRepository
 import com.example.gitserver.module.repository.interfaces.dto.*
 import mu.KotlinLogging
-import org.springframework.data.domain.PageRequest
-import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.ZoneOffset

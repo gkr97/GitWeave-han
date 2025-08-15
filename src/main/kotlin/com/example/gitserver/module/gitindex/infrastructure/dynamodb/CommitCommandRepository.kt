@@ -14,6 +14,13 @@ class CommitCommandRepository(
 ) {
     private val log = KotlinLogging.logger {}
 
+    /**
+     * 커밋 정보를 DynamoDB에 저장합니다.
+     * - PK: REPO#<repositoryId>
+     * - SK: COMMIT#<commitHash>#<branch>
+     *
+     * @param commit 저장할 커밋 객체
+     */
     fun save(commit: Commit) {
         log.info { "[saveCommit] 저장 시작: repoId=${commit.repositoryId}, hash=${commit.hash.value}" }
 

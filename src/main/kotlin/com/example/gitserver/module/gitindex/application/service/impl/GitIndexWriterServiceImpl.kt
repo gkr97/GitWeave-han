@@ -4,10 +4,7 @@ import com.example.gitserver.module.gitindex.domain.Blob
 import com.example.gitserver.module.gitindex.domain.BlobTree
 import com.example.gitserver.module.gitindex.domain.Commit
 import com.example.gitserver.module.gitindex.application.service.GitIndexWriter
-import com.example.gitserver.module.gitindex.infrastructure.dynamodb.BlobCommandRepository
-import com.example.gitserver.module.gitindex.infrastructure.dynamodb.CommitCommandRepository
-import com.example.gitserver.module.gitindex.infrastructure.dynamodb.GitIndexTxRepository
-import com.example.gitserver.module.gitindex.infrastructure.dynamodb.TreeCommandRepository
+import com.example.gitserver.module.gitindex.infrastructure.dynamodb.*
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -17,6 +14,7 @@ class GitIndexWriterServiceImpl(
     private val blobRepo: BlobCommandRepository,
     private val treeRepo: TreeCommandRepository,
     private val txRepo: GitIndexTxRepository,
+    private val commitQueryRepo: CommitQueryRepository,
 ) : GitIndexWriter {
 
     /**
@@ -51,4 +49,15 @@ class GitIndexWriterServiceImpl(
     override fun saveBlobAndTree(blob: Blob, tree: BlobTree) {
         txRepo.saveBlobAndTree(blob, tree)
     }
+
+    /**
+     * 특정 커밋 해시가 존재하는지 확인합니다.
+     * @param repositoryId 저장소 ID
+     * @param commitHash 확인할 커밋 해시
+     * @return 존재 여부
+     */
+    override fun existsCommit(repositoryId: Long, commitHash: String): Boolean {
+        return commitQueryRepo.existsCommit(repositoryId, commitHash)
+    }
+
 }

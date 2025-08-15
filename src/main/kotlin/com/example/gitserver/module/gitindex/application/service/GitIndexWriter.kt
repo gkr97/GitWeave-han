@@ -9,4 +9,5 @@ interface GitIndexWriter {
     fun saveBlob(blob: Blob)
     fun saveTree(tree: BlobTree)
     fun saveBlobAndTree(blob: Blob, tree: BlobTree)
+    fun existsCommit(repositoryId: Long, commitHash: String): Boolean
 }

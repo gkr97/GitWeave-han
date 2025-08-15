@@ -1,11 +1,14 @@
 package com.example.gitserver.module.gitindex.application.service.impl
 
+import com.example.gitserver.common.exception.BusinessException
 import com.example.gitserver.module.gitindex.application.service.GitService
 import com.example.gitserver.module.repository.domain.Repository
 import com.example.gitserver.module.repository.interfaces.dto.CloneUrlsResponse
 import com.example.gitserver.common.util.GitRefUtils
+import com.example.gitserver.module.repository.exception.*
 import mu.KotlinLogging
 import org.eclipse.jgit.api.Git
+import org.eclipse.jgit.api.errors.RefAlreadyExistsException
 import org.eclipse.jgit.lib.PersonIdent
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
@@ -24,7 +27,11 @@ class GitRepositoryService(
     private val log = KotlinLogging.logger {}
 
     /**
-     * 저장소를 초기화하고 README, .gitignore, LICENSE 파일을 생성합니다.
+     * 빈 Git 저장소를 초기화합니다.
+     * @param repository 초기화할 레포지토리 정보
+     * @param initializeReadme README 파일 생성 여부
+     * @param gitignoreTemplate .gitignore 템플릿 (언어별)
+     * @param licenseTemplate 라이선스 템플릿 (MIT, Apache 등)
      */
     override fun initEmptyGitDirectory(
         repository: Repository,
@@ -32,113 +39,136 @@ class GitRepositoryService(
         gitignoreTemplate: String?,
         licenseTemplate: String?
     ) {
-        val ownerId = repository.owner.id.toString()
+        val ownerId = repository.owner.id
         val repoName = repository.name
 
-        val bareRepoPath = Paths.get(bareRootPath, ownerId, "$repoName.git")
-        val workDirPath = Paths.get(workdirRootPath, ownerId, repoName)
+        val bareRepoPath = Paths.get(bareRootPath, ownerId.toString(), "$repoName.git")
+        val workDirPath = Paths.get(workdirRootPath, ownerId.toString(), repoName)
 
         log.info { "[Git] 저장소 초기화 시작 - repository=$repoName, ownerId=$ownerId" }
 
         if (Files.exists(bareRepoPath) || Files.exists(workDirPath)) {
-            log.warn { "[Git] 저장소 디렉토리 이미 존재 - bare=$bareRepoPath, workdir=$workDirPath" }
-            throw IllegalStateException("이미 존재하는 저장소입니다: $repoName")
+            log.warn { "[Git] 저장소 디렉터리 이미 존재 - bare=$bareRepoPath, workdir=$workDirPath" }
+            throw GitRepositoryAlreadyExistsException(ownerId, repoName)
         }
 
-        Files.createDirectories(bareRepoPath.parent)
-        Files.createDirectories(workDirPath.parent)
-
-        Git.init()
-            .setDirectory(bareRepoPath.toFile())
-            .setBare(true)
-            .call()
-        log.info { "[Git] bare 저장소 초기화 완료 - path=$bareRepoPath" }
-
-        bareRepoPath.resolve("git-daemon-export-ok").toFile().createNewFile()
-
         try {
-            val git = Git.cloneRepository()
+            Files.createDirectories(bareRepoPath.parent)
+            Files.createDirectories(workDirPath.parent)
+
+            try {
+                Git.init()
+                    .setDirectory(bareRepoPath.toFile())
+                    .setBare(true)
+                    .call()
+                log.info { "[Git] bare 저장소 초기화 완료 - path=$bareRepoPath" }
+            } catch (e: Exception) {
+                throw GitInitializationFailedException(repository.id)
+                    .also { log.error(e) { "[Git] bare init 실패" } }
+            }
+
+            bareRepoPath.resolve("git-daemon-export-ok").toFile().createNewFile()
+
+            Git.cloneRepository()
                 .setURI("file://${bareRepoPath.toAbsolutePath()}")
                 .setDirectory(workDirPath.toFile())
                 .call()
+                .use { git ->
+                    var needCommit = false
 
-            var needCommit = false
+                    if (initializeReadme) {
+                        workDirPath.resolve("README.md").toFile()
+                            .writeText("# $repoName\n\n${repository.description ?: ""}")
+                        needCommit = true
+                    }
+                    if (!gitignoreTemplate.isNullOrBlank()) {
+                        workDirPath.resolve(".gitignore").toFile()
+                            .writeText(getGitignoreTemplate(gitignoreTemplate))
+                        needCommit = true
+                    }
+                    if (!licenseTemplate.isNullOrBlank()) {
+                        workDirPath.resolve("LICENSE").toFile()
+                            .writeText(getLicenseTemplate(licenseTemplate, repository.owner.name ?: "unknown"))
+                        needCommit = true
+                    }
+                    if (!needCommit) {
+                        workDirPath.resolve(".gitkeep").toFile().writeText("")
+                        needCommit = true
+                    }
 
-            if (initializeReadme) {
-                val readme = workDirPath.resolve("README.md").toFile()
-                readme.writeText("# $repoName\n\n${repository.description ?: ""}")
-                needCommit = true
-            }
+                    if (needCommit) {
+                        try {
+                            git.add().addFilepattern(".").call()
+                            git.commit()
+                                .setMessage("Initial commit")
+                                .setAuthor(
+                                    PersonIdent(
+                                        repository.owner.name ?: "system",
+                                        repository.owner.email,
+                                        Date.from(Instant.now()),
+                                        TimeZone.getTimeZone("UTC")
+                                    )
+                                )
+                                .call()
+                        } catch (e: Exception) {
+                            throw GitInitialCommitOrPushFailedException(
+                                repository.id,
+                                detail = "initial commit",
+                                cause = e
+                            )
+                        }
 
-            if (!gitignoreTemplate.isNullOrBlank()) {
-                val gitignore = workDirPath.resolve(".gitignore").toFile()
-                gitignore.writeText(getGitignoreTemplate(gitignoreTemplate))
-                needCommit = true
-            }
+                        val defaultFull = GitRefUtils.toFullRef(repository.defaultBranch)
+                        val defaultShort = GitRefUtils.toShortName(defaultFull)!!
 
-            if (!licenseTemplate.isNullOrBlank()) {
-                val license = workDirPath.resolve("LICENSE").toFile()
-                license.writeText(getLicenseTemplate(licenseTemplate, repository.owner.name ?: "unknown"))
-                needCommit = true
-            }
+                        val headId = git.repository.resolve("HEAD")
+                            ?: throw HeadCommitNotFoundException(defaultFull)
 
-            if (!needCommit) {
-                val dummy = workDirPath.resolve(".gitkeep").toFile()
-                dummy.writeText("")
-                needCommit = true
-            }
+                        try {
+                            git.repository.updateRef(defaultFull).apply {
+                                setNewObjectId(headId)
+                                setExpectedOldObjectId(null)
+                                update()
+                            }
+                            git.repository.updateRef("HEAD").link(defaultFull)
 
-            if (needCommit) {
-                git.add().addFilepattern(".").call()
-                git.commit()
-                    .setMessage("Initial commit")
-                    .setAuthor(
-                        PersonIdent(
-                            repository.owner.name ?: "system",
-                            repository.owner.email,
-                            Date.from(Instant.now()),
-                            TimeZone.getTimeZone("UTC")
-                        )
-                    )
-                    .call()
+                            git.push().call()
+                            log.info { "[Git] 초기 커밋 및 푸시 완료 - repo=$repoName, branch=$defaultShort" }
 
-                val defaultFull = GitRefUtils.toFullRef(repository.defaultBranch)
-                val defaultShort = GitRefUtils.toShortName(defaultFull)!!
-
-                val headId = git.repository.resolve("HEAD")
-                    ?: throw IllegalStateException("HEAD 참조를 찾을 수 없습니다")
-
-                git.repository.updateRef(defaultFull).apply {
-                    setNewObjectId(headId)
-                    setExpectedOldObjectId(null)
-                    update()
+                            Git.open(bareRepoPath.toFile()).use { bareGit ->
+                                bareGit.repository.updateRef("HEAD").link(defaultFull)
+                            }
+                        } catch (e: Exception) {
+                            throw GitInitialCommitOrPushFailedException(
+                                repository.id,
+                                detail = "set default branch / push",
+                                cause = e
+                            )
+                        }
+                    }
                 }
 
-                git.repository.updateRef("HEAD").link(defaultFull)
+            log.info { "[Git] 저장소 clone/초기화 완료 - from=$bareRepoPath to=$workDirPath" }
 
-                git.push().call()
-                log.info { "[Git] 초기 커밋 및 푸시 완료 - repo=$repoName, branch=$defaultShort" }
-
-                Git.open(bareRepoPath.toFile()).use { bareGit ->
-                    bareGit.repository.updateRef("HEAD").link(defaultFull)
-                }
-            }
-
-            log.info { "[Git] 저장소 clone 완료 - from=$bareRepoPath to=$workDirPath" }
-
+        } catch (ex: BusinessException) {
+            rollbackDirectories(bareRepoPath.toString(), workDirPath.toString())
+            throw ex
         } catch (e: Exception) {
+            rollbackDirectories(bareRepoPath.toString(), workDirPath.toString())
             log.error(e) { "[Git] 저장소 clone 또는 초기화 실패 - 롤백 수행" }
-            bareRepoPath.toFile().deleteRecursively()
-            workDirPath.toFile().deleteRecursively()
-            throw IllegalStateException("Git 초기화 실패: ${e.message}")
+            throw GitInitializationFailedException(repository.id)
         }
     }
 
+    /**
+     * Git 저장소 디렉토리를 삭제합니다.
+     * @param repository 삭제할 레포지토리 정보
+     */
     override fun deleteGitDirectories(repository: Repository) {
-        val ownerId = repository.owner.id.toString()
+        val ownerId = repository.owner.id
         val repoName = repository.name
-        val bareRepoPath = Paths.get(bareRootPath, ownerId, "$repoName.git")
-        val workDirPath = Paths.get(workdirRootPath, ownerId, repoName)
+        val bareRepoPath = Paths.get(bareRootPath, ownerId.toString(), "$repoName.git")
+        val workDirPath = Paths.get(workdirRootPath, ownerId.toString(), repoName)
 
         try {
             bareRepoPath.toFile().deleteRecursively()
@@ -149,8 +179,14 @@ class GitRepositoryService(
         }
     }
 
+    /**
+     * 레포지토리의 클론 URL을 반환합니다.
+     * @param repository 대상 레포지토리
+     * @return CloneUrlsResponse 클론 URL 정보
+     */
     override fun getCloneUrls(repository: Repository): CloneUrlsResponse {
-        val username = repository.owner.name ?: throw IllegalStateException("owner name 없음")
+        val userId = repository.owner.id
+        val username = repository.owner.name ?: throw OwnerNameMissingException(userId)
         val repoName = repository.name
         return CloneUrlsResponse(
             https = "$gitBaseUrl/$username/$repoName.git",
@@ -160,31 +196,156 @@ class GitRepositoryService(
     }
 
     /**
-     * 지정된 브랜치의 HEAD 커밋 해시
+     * 레포지토리의 HEAD 커밋 해시를 반환합니다.
+     * @param repository 대상 레포지토리
+     * @param branchName 브랜치 이름
+     * @return HEAD 커밋 해시
      */
     override fun getHeadCommitHash(repository: Repository, branchName: String): String {
-        val ownerId = repository.owner.id.toString()
+        val ownerId = repository.owner.id
         val repoName = repository.name
-        val bareRepoPath = Paths.get(bareRootPath, ownerId, "$repoName.git")
-
+        val bareRepoPath = Paths.get(bareRootPath, ownerId.toString(), "$repoName.git")
         val fullRefName = GitRefUtils.toFullRef(branchName)
 
         Git.open(bareRepoPath.toFile()).use { git ->
             val ref = git.repository.exactRef(fullRefName)
-                ?: throw IllegalStateException("브랜치 '$fullRefName'에 대한 참조가 없습니다.")
+                ?: throw HeadCommitNotFoundException(fullRefName)
             return ref.objectId.name
         }
     }
 
-    private fun getGitignoreTemplate(language: String): String {
-        return when (language.lowercase()) {
-            "java" -> "*.class\n*.log\ntarget/\n.idea/\n"
-            "node" -> "node_modules/\ndist/\n*.log\n"
-            "python" -> "__pycache__/\n*.pyc\n.env\n"
-            else -> "# Empty .gitignore"
+    /**
+     * 새로운 브랜치를 생성합니다.
+     * @param repository 대상 레포지토리
+     * @param newBranch 새 브랜치 이름
+     * @param sourceBranch 소스 브랜치 (기본값: 레포지토리의 기본 브랜치)
+     */
+    override fun createBranch(repository: Repository, newBranch: String, sourceBranch: String?) {
+        val ownerId = repository.owner.id
+        val repoId = repository.id
+        val repoName = repository.name
+        val bareRepoPath = Paths.get(bareRootPath, ownerId.toString(), "$repoName.git")
+
+        Git.open(bareRepoPath.toFile()).use { git ->
+            val base = sourceBranch ?: repository.defaultBranch
+            val baseFull = GitRefUtils.toFullRef(base)
+            val baseRef = git.repository.findRef(baseFull)
+                ?: throw BranchNotFoundException(repoId, baseFull)
+
+            val newShort = GitRefUtils.toShortName(GitRefUtils.toFullRef(newBranch))!!
+
+            try {
+                git.branchCreate()
+                    .setName(newShort)
+                    .setStartPoint(baseRef.objectId.name)
+                    .call()
+            } catch (e: RefAlreadyExistsException) {
+                throw BranchAlreadyExistsException(repoId, GitRefUtils.toFullRef(newBranch))
+            } catch (e: Exception) {
+                throw RepositoryRenameFailedException(ownerId, repoName, repoName, e)
+            }
         }
     }
 
+    /**
+     * 지정된 브랜치를 삭제합니다.
+     * @param repository 대상 레포지토리
+     * @param branchName 삭제할 브랜치 이름
+     */
+    override fun deleteBranch(repository: Repository, branchName: String) {
+        val ownerId = repository.owner.id
+        val repoId = repository.id
+        val repoName = repository.name
+        val bareRepoPath = Paths.get(bareRootPath, ownerId.toString(), "$repoName.git")
+
+        Git.open(bareRepoPath.toFile()).use { git ->
+            val full = GitRefUtils.toFullRef(branchName)
+            val short = GitRefUtils.toShortName(full)!!
+
+            git.repository.findRef(full)
+                ?: throw BranchNotFoundException(repoId, full)
+
+            try {
+                git.branchDelete()
+                    .setBranchNames(short)
+                    .setForce(true)
+                    .call()
+            } catch (e: Exception) {
+                throw RepositoryRenameFailedException(ownerId, repoName, repoName, e)
+            }
+        }
+    }
+
+    /**
+     * 레포지토리 디렉토리 이름을 변경합니다.
+     * @param ownerId 소유자 ID
+     * @param oldName 기존 레포지토리 이름
+     * @param newName 새 레포지토리 이름
+     */
+    override fun renameRepositoryDirectory(ownerId: Long, oldName: String, newName: String) {
+        val oldBarePath = Paths.get(bareRootPath, ownerId.toString(), "$oldName.git")
+        val newBarePath = Paths.get(bareRootPath, ownerId.toString(), "$newName.git")
+        val oldWorkDir = Paths.get(workdirRootPath, ownerId.toString(), oldName)
+        val newWorkDir = Paths.get(workdirRootPath, ownerId.toString(), newName)
+
+        if (!Files.exists(oldBarePath)) {
+            throw RepositoryDirectoryNotFoundException(ownerId, oldName)
+        }
+        if (Files.exists(newBarePath)) {
+            throw RepositoryDirectoryAlreadyExistsException(ownerId, newName)
+        }
+
+        try {
+            Files.move(oldBarePath, newBarePath)
+            if (Files.exists(oldWorkDir)) {
+                if (Files.exists(newWorkDir)) {
+                    throw RepositoryDirectoryAlreadyExistsException(ownerId, newName)
+                }
+                Files.move(oldWorkDir, newWorkDir)
+            }
+        } catch (e: Exception) {
+            throw RepositoryRenameFailedException(ownerId, oldName, newName, e)
+        }
+    }
+
+    /**
+     * 롤백 시 bare 및 work 디렉토리를 삭제합니다.
+     * @param bare bare 저장소 경로
+     * @param work work 디렉토리 경로
+     */
+    private fun rollbackDirectories(bare: String, work: String) {
+        try {
+            val ok = Paths.get(bare).toFile().deleteRecursively()
+            if (!ok) log.warn { "[rollback] 일부 항목 삭제되지 않음: $bare" }
+        } catch (e: Exception) {
+            log.warn(e) { "[rollback] 삭제 실패: $bare" }
+        }
+        try {
+            val ok = Paths.get(work).toFile().deleteRecursively()
+            if (!ok) log.warn { "[rollback] 일부 항목 삭제되지 않음: $work" }
+        } catch (e: Exception) {
+            log.warn(e) { "[rollback] 삭제 실패: $work" }
+        }
+    }
+
+    /**
+     * 언어별 .gitignore 템플릿을 반환합니다.
+     * @param language 언어 이름 (소문자)
+     * @return .gitignore 템플릿 문자열
+     */
+    private fun getGitignoreTemplate(language: String): String = when (language.lowercase()) {
+        "java" -> "*.class\n*.log\ntarget/\n.idea/\n"
+        "node" -> "node_modules/\ndist/\n*.log\n"
+        "python" -> "__pycache__/\n*.pyc\n.env\n"
+        else -> "# Empty .gitignore"
+    }
+
+    /**
+     * 라이선스 템플릿을 반환합니다.
+     * @param type 라이선스 종류 (MIT, Apache-2.0 등)
+     * @param author 저자 이름
+     * @return 라이선스 템플릿 문자열
+     */
     private fun getLicenseTemplate(type: String, author: String): String {
         val year = java.time.Year.now().value
         return when (type.uppercase()) {
@@ -205,74 +366,4 @@ class GitRepositoryService(
             else -> "Custom License - $type"
         }
     }
-
-    /**
-     * 새 브랜치 생성
-     */
-    override fun createBranch(repository: Repository, newBranch: String, sourceBranch: String?) {
-        val ownerId = repository.owner.id.toString()
-        val repoName = repository.name
-        val bareRepoPath = Paths.get(bareRootPath, ownerId, "$repoName.git")
-
-        Git.open(bareRepoPath.toFile()).use { git ->
-            val base = sourceBranch ?: repository.defaultBranch
-            val baseFull = GitRefUtils.toFullRef(base)
-            val baseRef = git.repository.findRef(baseFull)
-                ?: throw IllegalArgumentException("브랜치 없음: $baseFull")
-
-            val newShort = GitRefUtils.toShortName(GitRefUtils.toFullRef(newBranch))!!
-
-            git.branchCreate()
-                .setName(newShort)
-                .setStartPoint(baseRef.objectId.name)
-                .call()
-        }
-    }
-
-    /**
-     * 브랜치 삭제
-     */
-    override fun deleteBranch(repository: Repository, branchName: String) {
-        val ownerId = repository.owner.id.toString()
-        val repoName = repository.name
-        val bareRepoPath = Paths.get(bareRootPath, ownerId, "$repoName.git")
-
-        Git.open(bareRepoPath.toFile()).use { git ->
-            val full = GitRefUtils.toFullRef(branchName)
-            val short = GitRefUtils.toShortName(full)!!
-
-            git.repository.findRef(full)
-                ?: throw IllegalArgumentException("브랜치 없음: $full")
-
-            git.branchDelete()
-                .setBranchNames(short)
-                .setForce(true)
-                .call()
-        }
-    }
-
-    /**
-     * 저장소 디렉토리 이름을 변경합니다.
-     * @param ownerId 소유자 ID
-     * @param oldName 기존 저장소 이름
-     * @param newName 새 저장소 이름
-     */
-    override fun renameRepositoryDirectory(ownerId: Long, oldName: String, newName: String) {
-        val oldBarePath = Paths.get(bareRootPath, ownerId.toString(), "$oldName.git")
-        val newBarePath = Paths.get(bareRootPath, ownerId.toString(), "$newName.git")
-        if (!Files.exists(oldBarePath)) {
-            throw IllegalStateException("기존 저장소 없음: $oldBarePath")
-        }
-        if (Files.exists(newBarePath)) {
-            throw IllegalStateException("이미 새 이름의 저장소 존재: $newBarePath")
-        }
-        Files.move(oldBarePath, newBarePath)
-
-        val oldWorkDir = Paths.get(workdirRootPath, ownerId.toString(), oldName)
-        val newWorkDir = Paths.get(workdirRootPath, ownerId.toString(), newName)
-        if (Files.exists(oldWorkDir)) {
-            Files.move(oldWorkDir, newWorkDir)
-        }
-    }
-
 }

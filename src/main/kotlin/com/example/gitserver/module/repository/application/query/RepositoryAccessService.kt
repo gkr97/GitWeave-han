@@ -5,7 +5,6 @@ import com.example.gitserver.module.repository.domain.Repository
 import com.example.gitserver.module.repository.exception.RepositoryAccessDeniedException
 import com.example.gitserver.module.repository.infrastructure.persistence.CollaboratorRepository
 import mu.KotlinLogging
-import org.springframework.security.access.AccessDeniedException
 import org.springframework.stereotype.Service
 
 @Service

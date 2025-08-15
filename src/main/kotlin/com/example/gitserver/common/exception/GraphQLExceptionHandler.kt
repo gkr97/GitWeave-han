@@ -7,16 +7,14 @@ import graphql.schema.DataFetchingEnvironment
 import org.springframework.graphql.execution.DataFetcherExceptionResolverAdapter
 import org.springframework.stereotype.Component
 
+
+/**
+ * GraphQL 예외 처리 핸들러
+ * 비즈니스 예외를 GraphQL 에러로 변환하여 클라이언트에 전달합니다.
+ */
 @Component
 class GraphQLExceptionHandler : DataFetcherExceptionResolverAdapter() {
 
-    /**
-     * 비즈니스 예외를 처리하여 GraphQL 에러로 변환합니다.
-     *
-     * @param ex Throwable - 발생한 예외
-     * @param env DataFetchingEnvironment - GraphQL 데이터 페칭 환경
-     * @return GraphQLError - 변환된 GraphQL 에러
-     */
     override fun resolveToSingleError(ex: Throwable, env: DataFetchingEnvironment): GraphQLError? {
         return when (ex) {
             is BusinessException -> GraphqlErrorBuilder.newError(env)
@@ -31,7 +29,17 @@ class GraphQLExceptionHandler : DataFetcherExceptionResolverAdapter() {
                 )
                 .build()
 
-            else -> null
+            else -> GraphqlErrorBuilder.newError(env)
+                .message("Internal server error")
+                .errorType(GraphQLCustomErrorType.BUSINESS)
+                .extensions(
+                    mapOf(
+                        "code" to "INTERNAL_ERROR",
+                        "status" to 500,
+                        "timestamp" to System.currentTimeMillis()
+                    )
+                )
+                .build()
         }
     }
 }

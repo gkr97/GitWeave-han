@@ -15,6 +15,13 @@ class TreeCommandRepository(
 ) {
     private val log = KotlinLogging.logger {}
 
+    /**
+     * 블롭 트리를 저장합니다.
+     * - PK: REPO#<repositoryId>
+     * - SK: TREE#<commitHash>#<path>
+     *
+     * @param tree 저장할 블롭 트리 객체
+     */
     fun save(tree: BlobTree) {
         log.info { "[saveTree] 저장 시작: repoId=${tree.repositoryId}, path=${tree.path.value}, commit=${tree.commitHash.value}" }
 

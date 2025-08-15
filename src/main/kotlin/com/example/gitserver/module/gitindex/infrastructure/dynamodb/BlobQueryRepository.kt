@@ -14,6 +14,11 @@ class BlobQueryRepository(
 ) {
     private val log = KotlinLogging.logger {}
 
+    /**
+     * 특정 레포지토리의 모든 블롭 파일의 확장자별 개수를 조회합니다.
+     * @param repoId 레포지토리 ID
+     * @return 확장자별 개수 맵
+     */
     fun countBlobsByExtension(repoId: Long): Map<String, Int> {
         val result = mutableMapOf<String, Int>()
         var lastEvaluatedKey: Map<String, AttributeValue>? = null
