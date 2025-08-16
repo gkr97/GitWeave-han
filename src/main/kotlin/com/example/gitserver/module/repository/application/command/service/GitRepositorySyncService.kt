@@ -19,6 +19,18 @@ class GitRepositorySyncService(
     private val branchRepository: BranchRepository,
     private val commitService: CommitService,
 ) {
+    /**
+     * 브랜치 동기화
+     * - 새로운 브랜치 생성 또는 기존 브랜치 업데이트
+     * - 브랜치가 삭제된 경우 해당 브랜치 삭제
+     * - 커밋 정보가 없으면 현재 시간으로 설정
+     *
+     * @param repositoryId 저장소 ID
+     * @param branchName 브랜치 이름 (예: "refs/heads/main")
+     * @param newHeadCommit 새 헤드 커밋 해시 (null이면 브랜치 삭제)
+     * @param lastCommitAt 마지막 커밋 시간 (null이면 커밋 정보 조회)
+     * @param creatorUser 브랜치를 생성한 사용자
+     */
     @Transactional
     fun syncBranch(
         repositoryId: Long,

@@ -284,7 +284,7 @@ class BlobIndexerServiceImpl(
                 }
             }
         }
-        return errorCount.get() to failures
+        return Pair(errorCount.get(), failures.toList())
     }
 
     private fun processBlob(

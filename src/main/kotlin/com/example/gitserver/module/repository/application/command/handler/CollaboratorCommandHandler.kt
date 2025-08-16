@@ -20,6 +20,21 @@ class CollaboratorCommandHandler(
 ) {
     private val log = KotlinLogging.logger {}
 
+    /**
+     * 저장소에 협업자를 초대합니다.
+     * 요청자가 저장소 소유자여야 하며, 이미 초대된 사용자는 중복 초대를 할 수 없습니다.
+     *
+     * @param repoId 저장소 ID
+     * @param userIdToInvite 초대할 사용자 ID
+     * @param requesterId 요청자 ID (저장소 소유자)
+     * @throws RepositoryNotFoundException 저장소가 존재하지 않는 경우
+     * @throws NotRepositoryOwnerException 요청자가 저장소 소유자가 아닌 경우
+     * @throws CollaboratorAlreadyExistsException 이미 협업자로 등록된 경우
+     * @throws CollaboratorAlreadyAcceptedException 이미 수락된 협업자인 경우
+     * @throws CollaboratorAlreadyInvitedException 이미 초대된 협업자인 경우
+     * @throws UserNotFoundException 초대할 사용자가 존재하지 않는 경우
+     * @throws RoleCodeNotFoundException 역할 코드가 존재하지 않는 경우
+     */
     @Transactional
     fun inviteCollaborator(repoId: Long, userIdToInvite: Long, requesterId: Long) {
         val repository = repositoryRepository.findById(repoId)
@@ -57,6 +72,15 @@ class CollaboratorCommandHandler(
         log.info { "[Collaborator] 초대 요청: repoId=$repoId, userId=$userIdToInvite by $requesterId" }
     }
 
+    /**
+     * 협업자 초대를 수락합니다.
+     * 초대된 사용자가 해당 저장소에 대한 협업 요청을 수락합니다.
+     *
+     * @param repoId 저장소 ID
+     * @param userId 초대된 사용자 ID
+     * @throws CollaboratorNotFoundException 협업자가 존재하지 않는 경우
+     * @throws CollaboratorAlreadyAcceptedException 이미 수락된 협업자인 경우
+     */
     @Transactional
     fun acceptInvitation(repoId: Long, userId: Long) {
         val collaborator = collaboratorRepository.findByRepositoryIdAndUserId(repoId, userId)
@@ -68,6 +92,14 @@ class CollaboratorCommandHandler(
         log.info { "[Collaborator] 초대 수락 완료 - repoId=$repoId, userId=$userId" }
     }
 
+    /**
+     * 협업자 초대를 거절합니다.
+     * 초대된 사용자가 해당 저장소에 대한 협업 요청을 거절하고, 협업자 목록에서 삭제합니다.
+     *
+     * @param repoId 저장소 ID
+     * @param userId 초대된 사용자 ID
+     * @throws CollaboratorNotFoundException 협업자가 존재하지 않는 경우
+     */
     @Transactional
     fun rejectInvitation(repoId: Long, userId: Long) {
         val collaborator = collaboratorRepository.findByRepositoryIdAndUserId(repoId, userId)
@@ -77,6 +109,17 @@ class CollaboratorCommandHandler(
         log.info { "[Collaborator] 초대 거절 및 삭제 - repoId=$repoId, userId=$userId" }
     }
 
+    /**
+     * 협업자를 강제 삭제합니다.
+     * 요청자가 저장소 소유자여야 하며, 해당 협업자가 존재해야 합니다.
+     *
+     * @param repoId 저장소 ID
+     * @param userId 협업자 사용자 ID
+     * @param requesterId 요청자 ID (저장소 소유자)
+     * @throws RepositoryNotFoundException 저장소가 존재하지 않는 경우
+     * @throws NotRepositoryOwnerException 요청자가 저장소 소유자가 아닌 경우
+     * @throws CollaboratorNotFoundException 협업자가 존재하지 않는 경우
+     */
     @Transactional
     fun removeCollaborator(repoId: Long, userId: Long, requesterId: Long) {
         val repository = repositoryRepository.findById(repoId)
