@@ -3,7 +3,7 @@ package com.example.gitserver.module.repository.application.query
 import com.example.gitserver.module.user.domain.User
 import com.example.gitserver.module.common.dto.CommonCodeDetailResponse
 import com.example.gitserver.module.common.service.CommonCodeCacheService
-import com.example.gitserver.module.gitindex.application.service.impl.GitArchiveService
+import com.example.gitserver.module.gitindex.infrastructure.git.GitArchiveAdapter
 import com.example.gitserver.module.repository.domain.Repository
 import com.example.gitserver.module.repository.infrastructure.persistence.CollaboratorRepository
 import com.example.gitserver.module.repository.infrastructure.persistence.RepositoryRepository
@@ -18,7 +18,7 @@ class RepositoryDownloadQueryServiceTest {
 
     private val repositoryRepository: RepositoryRepository = mock()
     private val collaboratorRepository: CollaboratorRepository = mock()
-    private val gitArchiveService: GitArchiveService = mock()
+    private val gitArchiveAdapter: GitArchiveAdapter = mock()
     private val commonCodeCacheService: CommonCodeCacheService = mock()
     private lateinit var service: RepositoryDownloadQueryService
 
@@ -30,7 +30,7 @@ class RepositoryDownloadQueryServiceTest {
         service = RepositoryDownloadQueryService(
             repositoryRepository,
             collaboratorRepository,
-            gitArchiveService,
+            gitArchiveAdapter,
             commonCodeCacheService
         )
         owner = User(id = 1L, email = "owner@test.com", passwordHash = "pw")

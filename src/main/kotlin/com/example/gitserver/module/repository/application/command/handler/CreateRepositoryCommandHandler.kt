@@ -1,12 +1,11 @@
 package com.example.gitserver.module.repository.application.command.handler
 
-import com.example.gitserver.common.util.GitRefUtils
 import com.example.gitserver.common.util.GitRefUtils.toFullRef
 import com.example.gitserver.module.common.service.CommonCodeCacheService
-import com.example.gitserver.module.gitindex.application.service.CommitService
+import com.example.gitserver.module.gitindex.application.query.CommitQueryService
 import com.example.gitserver.module.gitindex.domain.event.GitEvent
+import com.example.gitserver.module.gitindex.domain.port.GitRepositoryPort
 import com.example.gitserver.module.repository.application.command.CreateRepositoryCommand
-import com.example.gitserver.module.gitindex.application.service.GitService
 import com.example.gitserver.module.repository.domain.Branch
 import com.example.gitserver.module.repository.domain.Collaborator
 import com.example.gitserver.module.repository.domain.Repository
@@ -26,13 +25,13 @@ import java.time.ZoneOffset
 @Service
 class CreateRepositoryCommandHandler(
     private val repositoryRepository: RepositoryRepository,
+    private val gitRepositoryPort: GitRepositoryPort,
     private val branchRepository: BranchRepository,
-    private val gitService: GitService,
     private val gitEventPublisher: GitEventPublisher,
     private val commonCodeCacheService: CommonCodeCacheService,
     private val collaboratorRepository: CollaboratorRepository,
     private val userRepository: UserRepository,
-    private val commitService: CommitService,
+    private val commitService: CommitQueryService,
 
     ) {
     private val log = KotlinLogging.logger {}
@@ -79,7 +78,7 @@ class CreateRepositoryCommandHandler(
 
         try {
             Thread.startVirtualThread {
-                gitService.initEmptyGitDirectory(
+                gitRepositoryPort.initEmptyGitDirectory(
                     repository,
                     initializeReadme = command.initializeReadme,
                     gitignoreTemplate = command.gitignoreTemplate,
@@ -90,7 +89,7 @@ class CreateRepositoryCommandHandler(
         } catch (ex: Exception) {
             log.error(ex) { "Git 저장소 초기화 실패: ${repository.name}, 롤백 수행" }
             repositoryRepository.delete(repository)
-            gitService.deleteGitDirectories(repository)
+            gitRepositoryPort.deleteGitDirectories(repository)
             throw GitInitializationFailedException(repository.id)
         }
 
@@ -98,8 +97,7 @@ class CreateRepositoryCommandHandler(
 
         val branch = Branch.createDefault(repository, defaultBranchFullRef, command.owner)
 
-        val headCommitHash = gitService.getHeadCommitHash(repository, defaultBranchFullRef)
-            ?: throw HeadCommitNotFoundException(command.defaultBranch)
+        val headCommitHash = gitRepositoryPort.getHeadCommitHash(repository, defaultBranchFullRef)
         branch.updateHeadCommitHash(headCommitHash)
 
         val headCommit = commitService.getCommitInfo(repository.id, headCommitHash)

@@ -1,7 +1,7 @@
 package com.example.gitserver.module.repository.application.query
 
 import com.example.gitserver.module.common.service.CommonCodeCacheService
-import com.example.gitserver.module.gitindex.application.service.impl.GitArchiveService
+import com.example.gitserver.module.gitindex.infrastructure.git.GitArchiveAdapter
 import com.example.gitserver.module.repository.domain.vo.DownloadInfo
 import com.example.gitserver.module.repository.infrastructure.persistence.CollaboratorRepository
 import com.example.gitserver.module.repository.infrastructure.persistence.RepositoryRepository
@@ -14,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional
 class RepositoryDownloadQueryService(
     private val repositoryRepository: RepositoryRepository,
     private val collaboratorRepository: CollaboratorRepository,
-    private val gitArchiveService: GitArchiveService,
+    private val gitArchiveAdapter: GitArchiveAdapter,
     private val commonCodeCacheService: CommonCodeCacheService,
 ) {
     private val log = KotlinLogging.logger {}
@@ -69,7 +69,7 @@ class RepositoryDownloadQueryService(
             streamSupplier = {
                 try {
                     log.info { "[Download] archive stream 생성 시작: repoId=$repoId, branch=$branch, userId=$userId" }
-                    gitArchiveService.createArchiveStream(repo.owner.id, repo.name, branch)
+                    gitArchiveAdapter.createArchiveStream(repo.owner.id, repo.name, branch)
                 } catch (e: Exception) {
                     log.error(e) { "[Download] archive stream 생성 실패: repoId=$repoId, branch=$branch" }
                     throw ArchiveCreationFailedException(repoId, branch)

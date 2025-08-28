@@ -2,9 +2,9 @@ package com.example.gitserver.module.repository.application.query
 
 import com.example.gitserver.common.util.GitRefUtils
 import com.example.gitserver.module.common.service.CommonCodeCacheService
-import com.example.gitserver.module.gitindex.application.service.CommitService
-import com.example.gitserver.module.gitindex.application.service.impl.FileContentService
-import com.example.gitserver.module.gitindex.application.service.impl.FileTreeService
+import com.example.gitserver.module.gitindex.application.query.CommitQueryService
+import com.example.gitserver.module.gitindex.application.query.FileContentQueryService
+import com.example.gitserver.module.gitindex.application.query.FileTreeQueryService
 import com.example.gitserver.module.repository.exception.*
 import com.example.gitserver.module.repository.infrastructure.persistence.BranchRepository
 import com.example.gitserver.module.repository.infrastructure.persistence.CollaboratorRepository
@@ -18,12 +18,12 @@ import java.util.Locale
 
 @Service
 class RepositoryFileQueryService(
-    private val fileTreeService: FileTreeService,
-    private val fileContentService: FileContentService,
+    private val fileTreeQueryService: FileTreeQueryService,
+    private val fileContentQueryService: FileContentQueryService,
     private val repositoryRepository: RepositoryRepository,
     private val collaboratorRepository: CollaboratorRepository,
     private val commonCodeCacheService: CommonCodeCacheService,
-    private val commitService: CommitService,
+    private val commitService: CommitQueryService,
     private val branchRepository: BranchRepository,
 ) {
 
@@ -44,7 +44,7 @@ class RepositoryFileQueryService(
 
         val effectiveHash = commitHash ?: resolveLatestCommitHash(repositoryId, branch)
         try {
-            return fileTreeService.getFileTree(repositoryId, effectiveHash, path, branch)
+            return fileTreeQueryService.getFileTree(repositoryId, effectiveHash, path, branch)
         } catch (e: Exception) {
             throw FileTreeQueryFailedException(repositoryId, branch ?: "(default)", effectiveHash, e)
         }
@@ -67,7 +67,7 @@ class RepositoryFileQueryService(
 
         val effectiveHash = commitHash ?: resolveLatestCommitHash(repositoryId, branch)
         try {
-            return fileContentService.getFileContent(repositoryId, effectiveHash, path, branch)
+            return fileContentQueryService.getFileContent(repositoryId, effectiveHash, path, branch)
         } catch (e: Exception) {
             throw FileContentQueryFailedException(repositoryId, branch ?: "(default)", path, effectiveHash, e)
         }

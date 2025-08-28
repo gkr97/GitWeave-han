@@ -1,20 +1,22 @@
+// src/main/kotlin/com/example/gitserver/module/gitindex/interfaces/JGitHttpController.kt
 package com.example.gitserver.module.gitindex.interfaces
 
 import com.example.gitserver.module.gitindex.domain.event.GitEvent
-import com.example.gitserver.module.gitindex.application.service.impl.GitProtocolService
+import com.example.gitserver.module.gitindex.infrastructure.git.GitProtocolAdapter
 import com.example.gitserver.module.gitindex.infrastructure.redis.GitIndexEvictor
-import com.example.gitserver.module.repository.application.command.service.GitRepositorySyncService
+import com.example.gitserver.module.repository.application.command.handler.GitRepositorySyncHandler
 import com.example.gitserver.module.repository.application.query.RepositoryAccessQueryService
 import com.example.gitserver.module.repository.domain.event.GitEventPublisher
+import com.example.gitserver.module.repository.domain.event.SyncBranchEvent
 import com.example.gitserver.module.repository.infrastructure.persistence.RepositoryRepository
 import com.example.gitserver.module.user.infrastructure.persistence.UserRepository
 import io.swagger.v3.oas.annotations.Operation
-import org.eclipse.jgit.transport.PostReceiveHook
-import org.eclipse.jgit.lib.Repository
-import org.springframework.web.bind.annotation.*
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
+import org.eclipse.jgit.lib.Repository
 import org.eclipse.jgit.revwalk.RevWalk
+import org.eclipse.jgit.transport.PostReceiveHook
+import org.springframework.web.bind.annotation.*
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -22,21 +24,16 @@ import java.time.ZoneId
 @RestController
 class JGitHttpController(
     private val repoAccessService: RepositoryAccessQueryService,
-    private val gitProtocolService: GitProtocolService,
+    private val gitProtocolAdapter: GitProtocolAdapter,
     private val gitEventPublisher: GitEventPublisher,
     private val repositoryRepository: RepositoryRepository,
-    private val gitRepositorySyncService: GitRepositorySyncService,
+    private val gitRepositorySyncHandler: GitRepositorySyncHandler,
     private val userRepository: UserRepository,
     private val gitIndexEvictor: GitIndexEvictor
 ) {
-
-    /**
-     * username → userId 변환 유틸
-     */
-    private fun resolveUserId(username: String): Long {
-        return userRepository.findByNameAndIsDeletedFalse(username)?.id
+    private fun resolveUserId(username: String): Long =
+        userRepository.findByNameAndIsDeletedFalse(username)?.id
             ?: throw IllegalArgumentException("존재하지 않는 사용자: $username")
-    }
 
     private fun openAuthorizedRepository(
         username: String,
@@ -48,12 +45,11 @@ class JGitHttpController(
         val authHeader = request.getHeader("Authorization")
         val access = repoAccessService.checkAccess(repo, userId, authHeader)
         if (access !is RepositoryAccessQueryService.AccessResult.Authorized) {
-            unauthorizedResponse(response)
-            return null
+            unauthorizedResponse(response); return null
         }
         return try {
-            gitProtocolService.openRepository(userId, repo)
-        } catch (e: Exception) {
+            gitProtocolAdapter.openRepository(userId, repo)
+        } catch (_: Exception) {
             response.sendError(404, "Repository not found")
             null
         }
@@ -69,7 +65,7 @@ class JGitHttpController(
         response: HttpServletResponse
     ) {
         val repository = openAuthorizedRepository(username, repo, request, response) ?: return
-        gitProtocolService.advertiseRefs(service, repository, response)
+        gitProtocolAdapter.advertiseRefs(service, repository, response)
     }
 
     @Operation(summary = "Get repository capabilities")
@@ -85,7 +81,7 @@ class JGitHttpController(
         response: HttpServletResponse
     ) {
         val repository = openAuthorizedRepository(username, repo, request, response) ?: return
-        gitProtocolService.uploadPack(repository, request, response)
+        gitProtocolAdapter.uploadPack(repository, request, response)
     }
 
     @Operation(summary = "Receive pack for pushing changes")
@@ -125,13 +121,14 @@ class JGitHttpController(
                     }
                 } else null
 
-
-                gitRepositorySyncService.syncBranch(
-                    repositoryId = repositoryId,
-                    branchName = cmd.refName,
-                    newHeadCommit = if (!isDelete) newHash else null,
-                    lastCommitAt = committedAt,
-                    creatorUser = userEntity
+                gitRepositorySyncHandler.handle(
+                    SyncBranchEvent(
+                        repositoryId = repositoryId,
+                        branchName = cmd.refName,
+                        newHeadCommit = if (!isDelete) newHash else null,
+                        lastCommitAtUtc = committedAt
+                    ),
+                    creator = userEntity
                 )
 
                 gitEventPublisher.publish(
@@ -145,11 +142,10 @@ class JGitHttpController(
                         newrev = cmd.newId.name
                     )
                 )
-
                 gitIndexEvictor.evictAllOfRepository(repositoryId)
             }
         }
-        gitProtocolService.receivePack(repository, request, response, hook)
+        gitProtocolAdapter.receivePack(repository, request, response, hook)
     }
 
     private fun unauthorizedResponse(response: HttpServletResponse) {

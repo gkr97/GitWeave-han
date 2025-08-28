@@ -1,6 +1,6 @@
 package com.example.gitserver.module.repository.application.command.handler
 
-import com.example.gitserver.module.gitindex.application.service.GitService
+import com.example.gitserver.module.gitindex.domain.port.GitRepositoryPort
 import com.example.gitserver.module.repository.application.command.UpdateRepositoryCommand
 import com.example.gitserver.module.repository.infrastructure.persistence.RepositoryRepository
 import mu.KotlinLogging
@@ -12,7 +12,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 @Service
 class UpdateRepositoryCommandHandler(
     private val repositoryRepository: RepositoryRepository,
-    private val gitService: GitService
+    private val gitRepositoryPort: GitRepositoryPort
 ) {
     private val log = KotlinLogging.logger {}
 
@@ -57,7 +57,7 @@ class UpdateRepositoryCommandHandler(
             TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
                 override fun afterCommit() {
                     try {
-                        gitService.renameRepositoryDirectory(repo.owner.id, oldName, repo.name)
+                        gitRepositoryPort.renameRepositoryDirectory(repo.owner.id, oldName, repo.name)
                         log.info { "레포 디렉터리 이름 변경 성공: ownerId=${repo.owner.id}, $oldName → ${repo.name}" }
                     } catch (e: Exception) {
                         log.error(e) { "레포 디렉터리 이름 변경 실패: ownerId=${repo.owner.id}, old=$oldName, new=${repo.name}" }

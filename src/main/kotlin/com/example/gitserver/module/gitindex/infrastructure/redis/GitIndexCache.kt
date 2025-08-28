@@ -1,21 +1,20 @@
 package com.example.gitserver.module.gitindex.infrastructure.redis
 
-import com.example.gitserver.module.gitindex.infrastructure.dynamodb.BlobQueryRepository
-import com.example.gitserver.module.gitindex.infrastructure.dynamodb.CommitQueryRepository
-import com.example.gitserver.module.gitindex.infrastructure.dynamodb.TreeQueryRepository
+import com.example.gitserver.module.gitindex.domain.port.BlobQueryRepository
+import com.example.gitserver.module.gitindex.domain.port.CommitQueryRepository
+import com.example.gitserver.module.gitindex.domain.port.TreeQueryRepository
 import com.example.gitserver.module.repository.interfaces.dto.CommitResponse
 import org.springframework.cache.annotation.CacheConfig
 import org.springframework.cache.annotation.Cacheable
 import org.springframework.stereotype.Component
-import software.amazon.awssdk.services.dynamodb.model.AttributeValue
 
 
 @CacheConfig(cacheManager = "cacheManager")
 @Component
 class GitIndexCache(
-    private val commitQueryRepository: CommitQueryRepository,
-    private val treeQueryRepository: TreeQueryRepository,
-    private val blobQueryRepository: BlobQueryRepository,
+    private val commitQueryRepository : CommitQueryRepository,
+    private val treeQueryRepository : TreeQueryRepository,
+    private val blobQueryRepository : BlobQueryRepository,
 ) {
 
     /**
@@ -24,12 +23,6 @@ class GitIndexCache(
     @Cacheable(cacheNames = ["commitByHash"], key = "'c:'+#repositoryId+':'+#commitHash", unless = "#result == null")
     fun getCommitByHash(repositoryId: Long, commitHash: String): CommitResponse? =
         commitQueryRepository.getCommitByHash(repositoryId, commitHash)
-
-
-    @Cacheable(cacheNames = ["commitRowByHash"], key = "'cr:'+#repositoryId+':'+#commitHash", unless = "#result == null")
-    fun getCommitItem(repositoryId: Long, commitHash: String, branch: String?): Map<String, AttributeValue>? =
-        treeQueryRepository.getCommitItem(repositoryId, commitHash, branch)
-
 
     /**
      * 루트 트리 — 키: repoId + commitHash + ":root"

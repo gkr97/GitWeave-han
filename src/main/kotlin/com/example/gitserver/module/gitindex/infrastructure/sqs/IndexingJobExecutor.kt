@@ -1,13 +1,15 @@
 package com.example.gitserver.module.gitindex.infrastructure.sqs
 
+import com.example.gitserver.module.gitindex.application.command.IndexRepositoryHeadCommand
+import com.example.gitserver.module.gitindex.application.command.IndexRepositoryPushCommand
+import com.example.gitserver.module.gitindex.application.command.handler.IndexRepositoryCommandHandler
 import com.example.gitserver.module.gitindex.domain.event.GitEvent
-import com.example.gitserver.module.gitindex.application.service.BlobIndexer
 import org.springframework.stereotype.Service
 import java.nio.file.Path
 
 @Service
 class IndexingJobExecutor(
-    private val blobIndexer: BlobIndexer
+    private val handler: IndexRepositoryCommandHandler
 ) {
 
     /**
@@ -17,12 +19,10 @@ class IndexingJobExecutor(
      */
     fun indexRepository(event: GitEvent, gitDir: Path) {
         when (event.eventType) {
-            "REPO_CREATED" -> {
-                blobIndexer.indexRepository(event.repositoryId, gitDir)
-            }
-            "PUSH" -> {
-                blobIndexer.indexPush(event, gitDir)
-            }
+            "REPO_CREATED" ->
+                handler.handle(IndexRepositoryHeadCommand(event.repositoryId, gitDir))
+            "PUSH" ->
+                handler.handle(IndexRepositoryPushCommand(event, gitDir))
             else -> {
                 // TODO 필요 시 추가 이벤트 처리
             }

@@ -7,20 +7,17 @@ import com.example.gitserver.common.pagination.PageInfoDTO
 import com.example.gitserver.common.pagination.SortDirection as KeysetDir
 import com.example.gitserver.common.util.GitRefUtils
 import com.example.gitserver.module.common.service.CommonCodeCacheService
-import com.example.gitserver.module.gitindex.application.service.CommitService
-import com.example.gitserver.module.gitindex.application.service.GitService
-import com.example.gitserver.module.gitindex.application.service.ReadmeService
+import com.example.gitserver.module.gitindex.application.query.CommitQueryService
+import com.example.gitserver.module.gitindex.application.query.ReadmeQueryService
+import com.example.gitserver.module.gitindex.domain.port.GitRepositoryPort
 import com.example.gitserver.module.pullrequest.infrastructure.persistence.PullRequestRepository
 import com.example.gitserver.module.repository.application.query.model.*
 import com.example.gitserver.module.repository.exception.*
 import com.example.gitserver.module.repository.infrastructure.persistence.*
 import com.example.gitserver.module.repository.interfaces.dto.*
-import com.example.gitserver.module.user.exception.UserNotFoundException
 import com.example.gitserver.module.user.infrastructure.persistence.UserRepository
 import mu.KotlinLogging
-import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
-import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.ZoneOffset
@@ -36,16 +33,22 @@ class RepositoryQueryService(
     private val pullRequestRepository: PullRequestRepository,
     private val branchRepository: BranchRepository,
     private val repositoryStatsRepository: RepositoryStatsRepository,
-    private val gitService: GitService,
-    private val commitService: CommitService,
+    private val commitService: CommitQueryService,
     private val commonCodeCacheService: CommonCodeCacheService,
-    private val readmeService: ReadmeService,
+    private val readmeService: ReadmeQueryService,
     private val userRepository: UserRepository,
-    private val repositoryKeysetJdbcRepository: RepositoryKeySetRepository
+    private val repositoryKeysetJdbcRepository: RepositoryKeySetRepository,
+    private val gitRepositoryPort: GitRepositoryPort,
 ) {
 
     /**
-     * 저장소 단건 상세
+     * 저장소 상세 정보 조회
+     * - 존재하지 않는 저장소: RepositoryNotFoundException
+     * - 브랜치가 존재하지 않는 경우: BranchNotFoundException
+     * - 비공개 저장소에 대한 권한이 없는 경우: RepositoryAccessDeniedException
+     * - 기본 브랜치가 비어있는 경우: IllegalStateException
+     * - 기본 브랜치의 최신 커밋이 없는 경우: HeadCommitNotFoundException
+     * - README, 언어통계, 클론 URL은 병렬 조회
      */
     @Transactional(readOnly = true)
     fun getRepository(repoId: Long, branch: String? = null, currentUserId: Long?): RepoDetailResponse {
@@ -108,7 +111,7 @@ class RepositoryQueryService(
             val readmeContentFork = scope.fork { readmeService.getReadmeContent(repoId, mainCommit.hash) }
             val readmeHtmlFork = scope.fork { readmeService.getReadmeHtml(repoId, mainCommit.hash) }
             val languageStatsFork = scope.fork { readmeService.getLanguageStats(repoId) }
-            val cloneUrlsFork = scope.fork { gitService.getCloneUrls(repo) }
+            val cloneUrlsFork = scope.fork { gitRepositoryPort.getCloneUrls(repo) }
 
             scope.join()
             scope.throwIfFailed()

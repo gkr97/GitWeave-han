@@ -1,7 +1,7 @@
 package com.example.gitserver.module.repository.application.query
 
 import com.example.gitserver.common.pagination.*
-import com.example.gitserver.module.gitindex.application.service.CommitService
+import com.example.gitserver.module.gitindex.application.query.CommitQueryService
 import com.example.gitserver.module.repository.application.query.model.*
 import com.example.gitserver.module.repository.domain.Repository
 import com.example.gitserver.module.repository.exception.*
@@ -18,14 +18,11 @@ import java.time.ZoneOffset
 class BranchQueryService(
     private val branchRepository: BranchRepository,
     private val repositoryRepository: RepositoryRepository,
-    private val commitService: CommitService,
+    private val commitService: CommitQueryService,
     private val branchKeysetRepository: BranchKeysetRepository,
     private val repositoryAccessService: RepositoryAccessService
 ) {
     private val log = KotlinLogging.logger {}
-
-    /** 과도한 조회 방지용 상한 */
-    private val MAX_PAGE_SIZE = 100
 
     private fun String.toShortBranchName(): String = this.removePrefix("refs/heads/")
 
