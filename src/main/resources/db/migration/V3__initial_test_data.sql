@@ -53,8 +53,8 @@ VALUES
     (1, 1, 'README.md', 31, 5, 0);
 
 -- pull_request_commit
-INSERT INTO pull_request_commit (pull_request_id, commit_hash) VALUES
-    (1, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+INSERT INTO pull_request_commit (pull_request_id, commit_hash, seq) VALUES
+    (1, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 0);
 
 -- pull_request_merge_log
 INSERT INTO pull_request_merge_log (id, pull_request_id, merged_by_id, merge_commit_hash, merge_type_code_id, merged_at) VALUES
@@ -68,6 +68,4 @@ INSERT INTO pull_request_reviewer (id, pull_request_id, reviewer_id, status_code
 INSERT INTO pull_request_comment (id, pull_request_id, author_id, content, file_path, line_number, comment_type, created_at) VALUES
     (1, 1, 2, 'LGTM', 'README.md', 1, 'general', NOW());
 
--- pull_request_file_diff
-INSERT INTO pull_request_file_diff (id, pull_request_id, file_path, additions, deletions, patch, status_code_id, is_binary) VALUES
-    (1, 1, 'README.md', 5, 0, '+추가', 31, 0);
+

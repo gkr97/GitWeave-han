@@ -4,12 +4,14 @@ import com.example.gitserver.module.gitindex.application.command.IndexRepository
 import com.example.gitserver.module.gitindex.application.command.IndexRepositoryPushCommand
 import com.example.gitserver.module.gitindex.application.command.handler.IndexRepositoryCommandHandler
 import com.example.gitserver.module.gitindex.domain.event.GitEvent
+import com.example.gitserver.module.pullrequest.application.command.handler.PullRequestHeadUpdateOnPushHandler
 import org.springframework.stereotype.Service
 import java.nio.file.Path
 
 @Service
 class IndexingJobExecutor(
-    private val handler: IndexRepositoryCommandHandler
+    private val handler: IndexRepositoryCommandHandler,
+    private val prHeadUpdateOnPushHandler: PullRequestHeadUpdateOnPushHandler,
 ) {
 
     /**
@@ -21,8 +23,10 @@ class IndexingJobExecutor(
         when (event.eventType) {
             "REPO_CREATED" ->
                 handler.handle(IndexRepositoryHeadCommand(event.repositoryId, gitDir))
-            "PUSH" ->
+            "PUSH" -> {
                 handler.handle(IndexRepositoryPushCommand(event, gitDir))
+                prHeadUpdateOnPushHandler.handle(event)
+            }
             else -> {
                 // TODO 필요 시 추가 이벤트 처리
             }

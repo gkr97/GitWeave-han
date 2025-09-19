@@ -246,20 +246,25 @@ class DynamoGitIndexTxAdapter(
         return item
     }
 
-    private fun toTreeItem(tree: BlobTree): Map<String, AttributeValue> =
-        mapOf(
+    private fun toTreeItem(tree: BlobTree): Map<String, AttributeValue> {
+        val item = mutableMapOf(
             "PK" to AttributeValue.fromS("REPO#${tree.repositoryId}"),
             "SK" to AttributeValue.fromS("TREE#${tree.commitHash.value}#${tree.path.value}"),
             "type" to AttributeValue.fromS("tree"),
             "created_at" to AttributeValue.fromS(tree.lastModifiedAt?.toString() ?: Instant.now().toString()),
             "path" to AttributeValue.fromS(tree.path.value),
             "commit_hash" to AttributeValue.fromS(tree.commitHash.value),
-            "file_hash" to AttributeValue.fromS(tree.fileHash ?: ""),
             "name" to AttributeValue.fromS(tree.name),
             "is_directory" to AttributeValue.fromBool(tree.isDirectory),
             "size" to AttributeValue.fromN(tree.size?.toString() ?: "0"),
             "depth" to AttributeValue.fromN(tree.depth.toString())
         )
+
+        tree.fileHash?.takeIf { it.isNotBlank() }?.let {
+            item["file_hash"] = AttributeValue.fromS(it)
+        }
+        return item
+    }
 
     private fun normalizeBranch(input: String) =
         if (input.startsWith("refs/heads/")) input else "refs/heads/$input"

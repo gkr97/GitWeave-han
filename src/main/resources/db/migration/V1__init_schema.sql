@@ -167,18 +167,27 @@ CREATE TABLE `pull_request` (
 CREATE TABLE `pull_request_file` (
                                      `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT 'PK',
                                      `pull_request_id` BIGINT NOT NULL COMMENT 'PR PK',
-                                     `path` TEXT NOT NULL COMMENT '파일 경로',
+                                     `path` VARCHAR(500) NOT NULL COMMENT '파일 경로',
+                                     `old_path` VARCHAR(500) NULL COMMENT '이전 경로(리네임 지원)',
                                      `status_code_id` BIGINT NOT NULL COMMENT '상태 코드',
                                      `additions` INT NOT NULL DEFAULT 0 COMMENT '추가 라인',
                                      `deletions` INT NOT NULL DEFAULT 0 COMMENT '삭제 라인',
+                                     `is_binary` BOOLEAN NOT NULL DEFAULT FALSE COMMENT '바이너리 여부',
+                                     `blob_hash` VARCHAR(64) NULL COMMENT 'HEAD 시점 blob',
+                                     `old_blob_hash` VARCHAR(64) NULL COMMENT 'BASE 시점 blob',
+                                     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                                     `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                                      PRIMARY KEY (`id`),
-                                     KEY `idx_pr_file_pull_request_id` (`pull_request_id`),
-                                     CONSTRAINT `fk_pr_file_pull_request_id` FOREIGN KEY (`pull_request_id`) REFERENCES `pull_request` (`id`)
+                                     UNIQUE KEY `uq_pr_file_prid_path` (`pull_request_id`, `path`),
+                                     KEY `idx_pr_file_prid_status` (`pull_request_id`, `status_code_id`),
+                                     CONSTRAINT `fk_pr_file_pull_request_id`
+                                         FOREIGN KEY (`pull_request_id`) REFERENCES `pull_request` (`id`)
 ) COMMENT='PR 파일 변경';
 
 CREATE TABLE `pull_request_commit` (
                                        `pull_request_id` BIGINT NOT NULL COMMENT 'PR PK',
                                        `commit_hash` VARCHAR(40) NOT NULL COMMENT '커밋 해시(DynamoDB 참조)',
+                                       `seq` INT NOT NULL COMMENT '커밋 순서(0부터 시작)',
                                        PRIMARY KEY (`pull_request_id`, `commit_hash`),
                                        KEY `idx_pr_commit_pull_request_id` (`pull_request_id`)
 ) COMMENT='PR별 커밋 매핑';
@@ -195,15 +204,32 @@ CREATE TABLE `pull_request_merge_log` (
                                           CONSTRAINT `fk_merge_log_pull_request_id` FOREIGN KEY (`pull_request_id`) REFERENCES `pull_request` (`id`)
 ) COMMENT='PR 머지 로그';
 
+CREATE TABLE pull_request_thread (
+                                     id BIGINT NOT NULL AUTO_INCREMENT COMMENT '스레드 PK',
+                                     pull_request_id BIGINT NOT NULL COMMENT 'PR PK',
+                                     file_path VARCHAR(500) NOT NULL COMMENT '파일 경로',
+                                     anchor VARCHAR(255) NOT NULL COMMENT 'Diff anchor',
+                                     resolved BOOLEAN NOT NULL DEFAULT 0 COMMENT '해결 여부',
+                                     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                                     PRIMARY KEY (id),
+                                     KEY idx_pr_thread_prid (pull_request_id),
+                                     CONSTRAINT fk_pr_thread_pull_request FOREIGN KEY (pull_request_id)
+                                         REFERENCES pull_request (id)
+) COMMENT='PR 인라인 코멘트 스레드';
+
 CREATE TABLE `pull_request_reviewer` (
                                          `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT 'PK',
                                          `pull_request_id` BIGINT NOT NULL COMMENT 'PR PK',
                                          `reviewer_id` BIGINT NOT NULL COMMENT '리뷰어(유저) PK',
                                          `status_code_id` BIGINT NOT NULL COMMENT '상태 코드',
                                          `reviewed_at` DATETIME NULL COMMENT '리뷰 시각',
+                                         `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각',
+                                         `updated_at` DATETIME NULL COMMENT '수정 시각',
                                          PRIMARY KEY (`id`),
+                                         UNIQUE KEY `uk_pr_reviewer` (`pull_request_id`, `reviewer_id`),
                                          KEY `idx_reviewer_pull_request_id` (`pull_request_id`),
                                          KEY `idx_reviewer_reviewer_id` (`reviewer_id`),
+                                         KEY `idx_pr_reviewer_status_code_id` (`status_code_id`),
                                          CONSTRAINT `fk_reviewer_pull_request_id` FOREIGN KEY (`pull_request_id`) REFERENCES `pull_request` (`id`),
                                          CONSTRAINT `fk_reviewer_reviewer_id` FOREIGN KEY (`reviewer_id`) REFERENCES `user` (`id`)
 ) COMMENT='PR 리뷰어';
@@ -211,6 +237,7 @@ CREATE TABLE `pull_request_reviewer` (
 CREATE TABLE `pull_request_comment` (
                                         `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT 'PK',
                                         `pull_request_id` BIGINT NOT NULL COMMENT 'PR PK',
+                                        `thread_id` BIGINT NULL COMMENT '소속 스레드',
                                         `author_id` BIGINT NOT NULL COMMENT '작성자(유저) PK',
                                         `content` TEXT NOT NULL COMMENT '내용',
                                         `file_path` TEXT NULL COMMENT '파일 경로',
@@ -219,22 +246,14 @@ CREATE TABLE `pull_request_comment` (
                                         `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '작성 시각',
                                         PRIMARY KEY (`id`),
                                         KEY `idx_pr_comment_pull_request_id` (`pull_request_id`),
-                                        CONSTRAINT `fk_pr_comment_pull_request_id` FOREIGN KEY (`pull_request_id`) REFERENCES `pull_request` (`id`)
+                                        KEY `idx_pr_comment_thread_id` (`thread_id`),
+                                        CONSTRAINT `fk_pr_comment_pull_request_id`
+                                            FOREIGN KEY (`pull_request_id`) REFERENCES `pull_request` (`id`),
+                                        CONSTRAINT `fk_pr_comment_thread_id`
+                                            FOREIGN KEY (`thread_id`) REFERENCES `pull_request_thread` (`id`)
 ) COMMENT='PR 코멘트';
 
-CREATE TABLE `pull_request_file_diff` (
-                                          `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT 'PK',
-                                          `pull_request_id` BIGINT NOT NULL COMMENT 'PR PK',
-                                          `file_path` TEXT NOT NULL COMMENT '파일 경로',
-                                          `additions` INT NOT NULL DEFAULT 0 COMMENT '추가 라인',
-                                          `deletions` INT NOT NULL DEFAULT 0 COMMENT '삭제 라인',
-                                          `patch` TEXT NULL COMMENT 'diff patch',
-                                          `status_code_id` BIGINT NOT NULL COMMENT '상태 코드',
-                                          `is_binary` BOOLEAN NOT NULL DEFAULT 0 CHECK (`is_binary` IN (0,1)) COMMENT '바이너리 여부',
-                                          PRIMARY KEY (`id`),
-                                          KEY `idx_pr_file_diff_pull_request_id` (`pull_request_id`),
-                                          CONSTRAINT `fk_pr_file_diff_pull_request_id` FOREIGN KEY (`pull_request_id`) REFERENCES `pull_request` (`id`)
-) COMMENT='PR 파일 Diff';
+
 
 CREATE TABLE `personal_access_token` (
                                          `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT 'PK',

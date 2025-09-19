@@ -1,0 +1,169 @@
+extend type Query {
+    repositoryPullRequests(
+        repositoryId: Long!
+        page: Int
+        size: Int
+        keyword: String
+        status: String
+        sort: String
+        direction: String
+    ): PullRequestListConnection!
+
+    repositoryPullRequest(
+        repositoryId: Long!
+        prId: Long!
+    ): PullRequestDetail
+
+    repositoryPullRequestFiles(prId: Long!): [PullRequestFileItem!]!
+    repositoryPullRequestDiffs(prId: Long!): [PullRequestFileDiffItem!]!
+
+    repositoryPullRequestReviewers(prId: Long!): [PullRequestReviewerNode!]!
+    repositoryPullRequestReviewSummary(prId: Long!): PullRequestReviewSummary!
+
+    repositoryPullRequestMergeCheck(prId: Long!): MergeCheckResult!
+
+    repositoryPullRequestFileDiff(repositoryId: Long!, prId: Long!, filePath: String!): FileDiffResponse!
+
+    commitsConnection(
+        first: Int
+        after: String
+        last: Int
+        before: String
+    ): CommitConnection!
+}
+
+type CommitConnection {
+    edges: [CommitEdge!]!
+    pageInfo: PageInfo!
+    totalCount: Int
+}
+
+type CommitEdge {
+    cursor: String!
+    node: CommitResponse!
+}
+
+type PullRequestListConnection {
+    content: [PullRequestListItem!]!
+    page: Int!
+    size: Int!
+    totalElements: Int!
+    totalPages: Int!
+    hasNext: Boolean!
+}
+
+type PullRequestListItem {
+    id: Long!
+    repositoryId: Long!
+    title: String!
+    status: String!
+    sourceBranch: String!
+    targetBranch: String!
+    author: RepositoryUserResponse!
+    createdAt: String!
+    updatedAt: String
+}
+
+type PullRequestDetail {
+    id: Long!
+    repositoryId: Long!
+    title: String!
+    description: String
+    status: String!
+    sourceBranch: String!
+    targetBranch: String!
+    baseCommitHash: String
+    headCommitHash: String
+    author: RepositoryUserResponse!
+    createdAt: String!
+    updatedAt: String
+    commits: [CommitResponse!]!
+}
+
+type PullRequestFileItem {
+    id: Long!
+    path: String!
+    oldPath: String
+    status: String!
+    additions: Int!
+    deletions: Int!
+    isBinary: Boolean!
+    headBlobHash: String
+    baseBlobHash: String
+}
+
+type PullRequestFileDiffItem {
+    id: Long!
+    filePath: String!
+    oldPath: String
+    status: String!
+    additions: Int!
+    deletions: Int!
+    isBinary: Boolean!
+    headBlobHash: String
+    baseBlobHash: String
+    patch: String
+}
+
+type PullRequestReviewerNode {
+    user: RepositoryUserResponse!
+    status: String!
+    reviewedAt: String
+}
+
+type PullRequestReviewSummary {
+    total: Int!
+    pending: Int!
+    approved: Int!
+    changesRequested: Int!
+    dismissed: Int!
+}
+
+type MergeCheckResult {
+    mergeAllowed: Boolean!
+    reason: String
+}
+
+type FileDiffResponse {
+    filePath: String!
+    oldPath: String
+    status: String!
+    isBinary: Boolean!
+    headBlobHash: String
+    baseBlobHash: String
+    additions: Int!
+    deletions: Int!
+    chunks: [DiffChunk!]!
+    threads: [InlineThreadSummary!]!
+}
+
+type DiffChunk {
+    hunkIndex: Int!
+    header: String!
+    oldStart: Int!
+    newStart: Int!
+    lines: [DiffLine!]!
+}
+
+type DiffLine {
+    type: DiffLineType!
+    oldLine: Int
+    newLine: Int
+    content: String!
+    position: Int!
+    anchor: String!
+    commentCount: Int!
+}
+
+enum DiffLineType {
+    CONTEXT
+    ADDED
+    REMOVED
+}
+
+type InlineThreadSummary {
+    anchor: String!
+    threadId: Long!
+    totalComments: Int!
+    resolved: Boolean!
+}

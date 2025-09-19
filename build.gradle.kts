@@ -68,6 +68,7 @@ dependencies {
 
     // Git
     implementation("org.eclipse.jgit:org.eclipse.jgit:7.3.0.202506031305-r")
+    implementation("org.eclipse.jgit:org.eclipse.jgit.archive:6.10.0.202406032230-r")
     implementation("org.apache.tika:tika-core:2.9.0")
 
     // S3 Blob Uploader

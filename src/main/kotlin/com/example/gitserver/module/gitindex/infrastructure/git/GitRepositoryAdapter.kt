@@ -1,13 +1,21 @@
 package com.example.gitserver.module.gitindex.infrastructure.git
 
+import com.example.gitserver.module.gitindex.domain.dto.MergeRequest
+import com.example.gitserver.common.util.GitRefUtils
+import com.example.gitserver.module.gitindex.exception.*
+import org.eclipse.jgit.api.errors.*
+import java.nio.file.Path
+import java.util.Date
+import java.util.TimeZone
+import org.eclipse.jgit.transport.RefSpec
 import com.example.gitserver.common.exception.BusinessException
 import com.example.gitserver.module.repository.domain.Repository
 import com.example.gitserver.module.repository.interfaces.dto.CloneUrlsResponse
-import com.example.gitserver.common.util.GitRefUtils
 import com.example.gitserver.module.gitindex.domain.port.GitRepositoryPort
+import com.example.gitserver.module.gitindex.domain.vo.MergeType
 import com.example.gitserver.module.repository.exception.*
 import mu.KotlinLogging
-import org.eclipse.jgit.api.Git
+import org.eclipse.jgit.api.*
 import org.eclipse.jgit.api.errors.RefAlreadyExistsException
 import org.eclipse.jgit.lib.PersonIdent
 import org.springframework.beans.factory.annotation.Value
@@ -308,6 +316,178 @@ class GitRepositoryAdapter(
         }
     }
 
+    override fun merge(req: MergeRequest): String {
+        val repo = req.repository
+        val ownerId = repo.owner.id
+        val repoName = repo.name
+
+        val bareRepoPath = Paths.get(bareRootPath, ownerId.toString(), "$repoName.git")
+        if (!Files.exists(bareRepoPath)) {
+            throw RepositoryDirectoryNotFoundException(ownerId, repoName)
+        }
+
+        // 임시 워킹카피
+        val workdir: Path = Paths.get(workdirRootPath, ownerId.toString(), repoName, "merge-${UUID.randomUUID()}")
+        try {
+            Files.createDirectories(workdir.parent)
+
+            val sourceFull = GitRefUtils.toFullRef(req.sourceRef)
+            val targetFull = GitRefUtils.toFullRef(req.targetRef)
+            val sourceShort = GitRefUtils.toShortName(sourceFull)!!
+            val targetShort = GitRefUtils.toShortName(targetFull)!!
+
+            // clone 후 target(main) checkout
+            Git.cloneRepository()
+                .setURI("file://${bareRepoPath.toAbsolutePath()}")
+                .setDirectory(workdir.toFile())
+                .setBranchesToClone(listOf(sourceFull, targetFull))
+                .setBranch(targetFull)
+                .call()
+                .use { git ->
+
+                    // source(dev) 브랜치 생성 (origin/dev 추적)
+                    git.branchCreate()
+                        .setName(sourceShort)
+                        .setUpstreamMode(CreateBranchCommand.SetupUpstreamMode.TRACK)
+                        .setStartPoint("origin/$sourceShort")
+                        .setForce(true)
+                        .call()
+
+                    val ident = PersonIdent(
+                        req.authorName,
+                        req.authorEmail,
+                        Instant.now(),
+                        req.timeZone
+                    )
+
+                    val cfg = git.repository.config
+                    cfg.setString("user", null, "name", req.authorName)
+                    cfg.setString("user", null, "email", req.authorEmail)
+                    cfg.save()
+
+                    when (req.mergeType) {
+                        MergeType.MERGE_COMMIT -> {
+                            val srcId = git.repository.exactRef(sourceFull)?.objectId
+                                ?: throw GitRefNotFoundException(sourceFull)
+
+                            val result = git.merge()
+                                .include(srcId)
+                                .setCommit(true)
+                                .setFastForward(MergeCommand.FastForwardMode.NO_FF)
+                                .setMessage(req.message ?: "Merge $sourceShort into $targetShort")
+                                .call()
+
+                            if (!result.mergeStatus.isSuccessful) {
+                                if (result.mergeStatus == MergeResult.MergeStatus.CONFLICTING) {
+                                    throw GitMergeConflictException(
+                                        sourceFull, targetFull,
+                                        result.conflicts?.keys?.joinToString()
+                                    )
+                                }
+                                throw GitMergeFailedException(sourceFull, targetFull, result.mergeStatus.name)
+                            }
+                        }
+
+                        MergeType.SQUASH -> {
+                            val srcId = git.repository.exactRef(sourceFull)?.objectId
+                                ?: throw GitRefNotFoundException(sourceFull)
+
+                            val result = git.merge()
+                                .include(srcId)
+                                .setSquash(true)
+                                .setCommit(false)
+                                .call()
+
+                            if (!result.mergeStatus.isSuccessful) {
+                                if (result.mergeStatus == MergeResult.MergeStatus.CONFLICTING) {
+                                    throw GitMergeConflictException(
+                                        sourceFull, targetFull,
+                                        result.conflicts?.keys?.joinToString()
+                                    )
+                                }
+                                throw GitMergeFailedException(sourceFull, targetFull, result.mergeStatus.name)
+                            }
+
+                            git.commit()
+                                .setAuthor(ident)
+                                .setCommitter(ident)
+                                .setMessage(req.message ?: "Squash merge $sourceShort into $targetShort")
+                                .call()
+                        }
+
+                        MergeType.REBASE -> {
+                            try {
+                                git.checkout().setName(sourceShort).call()
+
+                                val targetCommitId = git.repository.exactRef(targetFull)?.objectId
+                                    ?: throw GitRefNotFoundException(targetFull)
+
+                                val result = git.rebase()
+                                    .setUpstream(targetCommitId)
+                                    .setOperation(RebaseCommand.Operation.BEGIN)
+                                    .call()
+
+                                when (result.status) {
+                                    RebaseResult.Status.OK,
+                                    RebaseResult.Status.FAST_FORWARD -> {
+
+                                    }
+                                    RebaseResult.Status.STOPPED,
+                                    RebaseResult.Status.CONFLICTS -> {
+                                        runCatching { git.rebase().setOperation(RebaseCommand.Operation.ABORT).call() }
+                                        throw GitMergeConflictException(sourceFull, targetFull, "Rebase conflicts")
+                                    }
+                                    else -> throw GitMergeFailedException(sourceFull, targetFull, "Rebase ${result.status}")
+                                }
+
+                                git.checkout().setName(targetShort).call()
+                                git.merge()
+                                    .include(git.repository.findRef(sourceFull))
+                                    .setFastForward(MergeCommand.FastForwardMode.FF_ONLY)
+                                    .call()
+
+                            } catch (e: Exception) {
+                                throw GitMergeFailedException(sourceFull, targetFull, e.message, e)
+                            }
+                        }
+                    }
+
+                    // push target(origin/main)
+                    git.push()
+                        .setRemote("origin")
+                        .setRefSpecs(RefSpec("refs/heads/$targetShort:refs/heads/$targetShort"))
+                        .call()
+
+                    // 새 HEAD 반환하기
+                    val newHead = git.repository.resolve(targetFull)?.name
+                        ?: throw GitHeadNotFoundException()
+                    return newHead
+                }
+        } catch (e: Exception) {
+            throw when (e) {
+                is GitMergeConflictException,
+                is GitRefNotFoundException,
+                is GitMergeFailedException -> e
+
+                is RefNotFoundException -> GitRefNotFoundException(req.sourceRef, e)
+                is CheckoutConflictException,
+                is GitAPIException -> GitMergeFailedException(req.sourceRef, req.targetRef, e.message, e)
+                else -> GitMergeFailedException(req.sourceRef, req.targetRef, e.message, e)
+            }
+        } finally {
+            // 임시 워킹카피 정리
+            runCatching {
+                if (Files.exists(workdir)) {
+                    Files.walk(workdir)
+                        .sorted(Comparator.reverseOrder())
+                        .forEach { Files.deleteIfExists(it) }
+                }
+            }
+        }
+    }
+
+
+
     /**
      * 롤백 시 bare 및 work 디렉토리를 삭제합니다.
      * @param bare bare 저장소 경로
@@ -327,6 +507,7 @@ class GitRepositoryAdapter(
             log.warn(e) { "[rollback] 삭제 실패: $work" }
         }
     }
+
 
     /**
      * 언어별 .gitignore 템플릿을 반환합니다.

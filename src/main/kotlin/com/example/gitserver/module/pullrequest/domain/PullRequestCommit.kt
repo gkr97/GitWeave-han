@@ -14,7 +14,10 @@ data class PullRequestCommit(
 
     @Id
     @Column(name = "commit_hash", length = 40, nullable = false)
-    val commitHash: String
+    val commitHash: String,
+
+    @Column(name = "position", nullable = false)
+    val position: Int
 )
 
 data class PullRequestCommitId(

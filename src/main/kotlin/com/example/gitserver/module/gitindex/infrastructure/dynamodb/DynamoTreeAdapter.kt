@@ -26,19 +26,22 @@ class DynamoTreeAdapter(
     override fun save(tree: BlobTree) {
         log.info { "[saveTree] 저장 시작: repoId=${tree.repositoryId}, path=${tree.path.value}, commit=${tree.commitHash.value}" }
 
-        val item = mapOf(
+        val item = mutableMapOf(
             "PK" to AttributeValue.fromS("REPO#${tree.repositoryId}"),
             "SK" to AttributeValue.fromS("TREE#${tree.commitHash.value}#${tree.path.value}"),
             "type" to AttributeValue.fromS("tree"),
             "created_at" to AttributeValue.fromS(tree.lastModifiedAt?.toString() ?: Instant.now().toString()),
             "path" to AttributeValue.fromS(tree.path.value),
             "commit_hash" to AttributeValue.fromS(tree.commitHash.value),
-            "file_hash" to AttributeValue.fromS(tree.fileHash ?: ""),
             "name" to AttributeValue.fromS(tree.name),
             "is_directory" to AttributeValue.fromBool(tree.isDirectory),
             "size" to AttributeValue.fromN(tree.size?.toString() ?: "0"),
             "depth" to AttributeValue.fromN(tree.depth.toString())
         )
+
+        tree.fileHash?.takeIf { it.isNotBlank() }?.let {
+            item["file_hash"] = AttributeValue.fromS(it)
+        }
 
         dynamoDbClient.putItem { it.tableName(tableName).item(item) }
 

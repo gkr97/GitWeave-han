@@ -3,6 +3,7 @@ package com.example.gitserver.module.gitindex.application.command.handler
 import com.example.gitserver.module.gitindex.application.command.IndexRepositoryCommand
 import com.example.gitserver.module.gitindex.application.command.IndexRepositoryHeadCommand
 import com.example.gitserver.module.gitindex.application.command.IndexRepositoryPushCommand
+import com.example.gitserver.module.gitindex.application.internal.FullTreeSnapshotMaterializer
 import com.example.gitserver.module.gitindex.application.internal.ScanDiff
 import com.example.gitserver.module.gitindex.application.internal.TreeScanIndexer
 import com.example.gitserver.module.gitindex.domain.Commit
@@ -40,6 +41,7 @@ class IndexRepositoryCommandHandler(
     private val failurePublisher: IndexingFailurePublisher,
     private val userRepository: UserRepository,
     private val txRepo: IndexTxRepository,
+    private val snapshotter: FullTreeSnapshotMaterializer,
 ) {
 
     @Transactional
@@ -87,6 +89,15 @@ class IndexRepositoryCommandHandler(
                             repositoryId, commit.name, commit.tree.id, g.repository,
                             basePath = "", commitInstant = commit.committerIdent.whenAsInstant
                         )
+
+                        snapshotter.materialize(
+                            repositoryId = repositoryId,
+                            commitHash = commit.name,
+                            treeId = commit.tree.id,
+                            repo = g.repository,
+                            at = commit.committerIdent.whenAsInstant
+                        )
+
                         finalizeCommit(
                             repositoryId = repositoryId,
                             commit = commit,
@@ -133,12 +144,21 @@ class IndexRepositoryCommandHandler(
                         val vo = buildCommitVo(event.repositoryId, c, branch)
                         val took = measureTimeMillis {
                             val result = if (c.parents.isNotEmpty()) {
-                                log.debug { "[Index] Diff 스캔 - parent=${c.parents.first().name}, tree=${c.tree.id.name}" }
-                                diffIndexer.scan(event.repositoryId, c.name, c.parents.first().tree?.id, c.tree.id, repo, c.committerIdent.whenAsInstant)
+                                log.debug { "[Index] Diff 스캔(2..3-way 자동) - commit=${c.name}" }
+                                diffIndexer.scan(event.repositoryId, c, repo, c.committerIdent.whenAsInstant)
                             } else {
                                 log.debug { "[Index] Full 스캔 - initial commit, tree=${c.tree.id.name}" }
                                 treeIndexer.scan(event.repositoryId, c.name, c.tree.id, repo, "", c.committerIdent.whenAsInstant)
                             }
+
+                            snapshotter.materialize(
+                                repositoryId = event.repositoryId,
+                                commitHash = c.name,
+                                treeId = c.tree.id,
+                                repo = repo,
+                                at = c.committerIdent.whenAsInstant
+                            )
+
                             finalizeCommit(event.repositoryId, c, vo, result, branch, null)
                         }
                         log.info { "[Index] 커밋 인덱싱 완료 - commit=${c.name}, tookMs=$took" }
@@ -163,14 +183,24 @@ class IndexRepositoryCommandHandler(
                     val vo = buildCommitVo(event.repositoryId, c, branch)
                     val took = measureTimeMillis {
                         val result = if (c.parents.isNotEmpty()) {
-                            log.debug { "[Index] Diff 스캔 - parent=${c.parents.first().name}, tree=${c.tree.id.name}" }
-                            diffIndexer.scan(event.repositoryId, c.name, c.parents.first().tree?.id, c.tree.id, repo, c.committerIdent.whenAsInstant)
+                            log.debug { "[Index] Diff 스캔(2/3-way 자동) - commit=${c.name}" }
+                            diffIndexer.scan(event.repositoryId, c, repo, c.committerIdent.whenAsInstant)
                         } else {
                             log.debug { "[Index] Full 스캔 - initial commit, tree=${c.tree.id.name}" }
                             treeIndexer.scan(event.repositoryId, c.name, c.tree.id, repo, "", c.committerIdent.whenAsInstant)
                         }
+
+                        snapshotter.materialize(
+                            repositoryId = event.repositoryId,
+                            commitHash = c.name,
+                            treeId = c.tree.id,
+                            repo = repo,
+                            at = c.committerIdent.whenAsInstant
+                        )
+
                         finalizeCommit(event.repositoryId, c, vo, result, branch, event.oldrev?.let { CommitHash(it) })
                     }
+
                     log.info { "[Index] 커밋 인덱싱 완료 - commit=${c.name}, tookMs=$took" }
                 }
             }
@@ -190,20 +220,17 @@ class IndexRepositoryCommandHandler(
             val sealMs = measureTimeMillis { txRepo.prepareCommit(commitVo) }
             log.debug { "[Index] 트랜잭션 준비 완료 - tookMs=$sealMs" }
 
-            if (result.count == 0) {
-                val casMs: Long
-                val ok: Boolean
-                val start = System.currentTimeMillis()
-                ok = txRepo.sealCommitAndUpdateRef(repositoryId, branch, commitVo.hash, expectedOld)
-                casMs = System.currentTimeMillis() - start
-                if (ok) {
-                    log.info { "[Index] 커밋 확정 완료 - commit=${commit.name}, casTookMs=$casMs" }
-                } else {
-                    log.warn { "[Index] Ref CAS 실패 - repo=$repositoryId, branch=$branch, commit=${commit.name}, casTookMs=$casMs" }
-                }
+            val start = System.currentTimeMillis()
+            val ok = txRepo.sealCommitAndUpdateRef(repositoryId, branch, commitVo.hash, expectedOld)
+            val casMs = System.currentTimeMillis() - start
+            if (ok) {
+                log.info { "[Index] 커밋 확정 완료 - commit=${commit.name}, casTookMs=$casMs" }
             } else {
+                log.warn { "[Index] Ref CAS 실패 - repo=$repositoryId, branch=$branch, commit=${commit.name}, casTookMs=$casMs" }
+            }
+
+            if (result.count > 0) {
                 result.details.forEach {
-                    log.debug { "[Index] 파일 인덱싱 실패 - path=${it.path}, objectId=${it.objectId}, reason=${it.reason}" }
                     failurePublisher.publishFileFailure(repositoryId, commit.name, it.path, it.objectId, it.reason, it.throwable)
                 }
                 log.warn { "[Index] 파일 인덱싱 부분 실패 ${result.count}건 - commit=${commit.name}" }
@@ -236,12 +263,6 @@ class IndexRepositoryCommandHandler(
         )
     }
 
-    /**
-     * 브랜치 이름 정규화
-     * - null/빈값/공백 -> refs/heads/main
-     * - refs/heads/로 시작하면 그대로
-     * - 그 외 -> refs/heads/{input}
-     */
     private fun normalizeBranch(input: String?): String =
         if (input.isNullOrBlank()) {
             log.debug { "[Index] 브랜치 누락 - 기본 main 사용" }
@@ -254,26 +275,30 @@ class IndexRepositoryCommandHandler(
             normalized
         }
 
-    /**
-     * 브랜치에 매핑만 저장 (커밋은 이미 존재하는 상태)
-     */
-    private fun saveBranchMappingOnly(repositoryId: Long, commitId: ObjectId, repo: Repository, branch: String) {
+    private fun saveBranchMappingOnly(
+        repositoryId: Long,
+        commitId: ObjectId,
+        repo: Repository,
+        branch: String
+    ) {
         RevWalk(repo).use { rw ->
             val rc = rw.parseCommit(commitId)
             withMDC(repositoryId, branch, rc.name) {
                 val vo = buildCommitVo(repositoryId, rc, branch)
+
+                txRepo.prepareCommit(vo)
+
                 val ok = txRepo.sealCommitAndUpdateRef(repositoryId, branch, vo.hash, null)
-                if (ok) log.info { "[Index] 브랜치 매핑 저장 완료 - branch=$branch, commit=${rc.name}" }
-                else log.warn { "[Index] 브랜치 매핑 CAS 실패 - branch=$branch, commit=${rc.name}" }
+
+                if (ok) {
+                    log.info { "[Index] 브랜치 매핑 저장 완료 - branch=$branch, commit=${rc.name}" }
+                } else {
+                    log.warn { "[Index] 브랜치 매핑 CAS 실패 - branch=$branch, commit=${rc.name}" }
+                }
             }
         }
     }
 
-
-    /**
-     * start 커밋부터 거슬러 올라가면서 isKnown이 true를 반환하는 커밋을 만날 때까지의 커밋들을 반환
-     * 반환되는 커밋들은 오래된 순서가 아님(RevWalk 순서)
-     */
     private fun collectUntilKnown(repo: Repository, start: ObjectId, isKnown: (String) -> Boolean): List<RevCommit> {
         val acc = mutableListOf<RevCommit>()
         RevWalk(repo).use { rw ->
@@ -284,9 +309,6 @@ class IndexRepositoryCommandHandler(
         return acc
     }
 
-    /**
-     * oldId(포함X) ~ newId(포함O) 범위의 커밋을 오래된 순서대로 반환
-     */
     private fun revListOldToNew(repo: Repository, oldId: ObjectId, newId: ObjectId): List<RevCommit> {
         RevWalk(repo).use { rw ->
             rw.sort(RevSort.TOPO, true); rw.sort(RevSort.REVERSE, true)
@@ -297,9 +319,6 @@ class IndexRepositoryCommandHandler(
         }
     }
 
-    /**
-     * 커밋 단위 MDC 설정 유틸
-     */
     private inline fun <T> withMDC(repositoryId: Long, branch: String, commit: String, block: () -> T): T {
         MDC.put("repoId", repositoryId.toString())
         MDC.put("branch", branch)

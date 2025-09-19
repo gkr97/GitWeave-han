@@ -4,5 +4,5 @@ import java.io.InputStream
 
 data class DownloadInfo(
     val filename: String,
-    val streamSupplier: () -> Pair<InputStream, Process>
+    val streamSupplier: () -> InputStream
 )

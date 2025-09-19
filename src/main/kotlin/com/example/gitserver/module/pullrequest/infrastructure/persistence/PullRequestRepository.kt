@@ -8,4 +8,17 @@ interface PullRequestRepository : JpaRepository<PullRequest, Long> {
 
     @Query("SELECT COUNT(pr) FROM PullRequest pr WHERE pr.repository.id = :repoId AND pr.statusCodeId = 2L")
     fun countByRepositoryIdAndClosedFalse(repoId: Long): Int
+
+    fun existsByRepositoryIdAndSourceBranchAndTargetBranchAndStatusCodeId(
+        repositoryId: Long,
+        sourceBranch: String,
+        targetBranch: String,
+        statusCodeId: Long
+    ): Boolean
+
+    fun findAllByRepositoryIdAndSourceBranchAndStatusCodeId(
+        repositoryId: Long,
+        sourceBranch: String?,
+        statusCodeId: Long
+    ): List<PullRequest>
 }

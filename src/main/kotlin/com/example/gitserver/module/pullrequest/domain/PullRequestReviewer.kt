@@ -5,7 +5,10 @@ import jakarta.persistence.*
 import com.example.gitserver.module.user.domain.User
 
 @Entity
-@Table(name = "pull_request_reviewer")
+@Table(
+    name = "pull_request_reviewer",
+    uniqueConstraints = [UniqueConstraint(columnNames = ["pull_request_id", "reviewer_id"])]
+)
 data class PullRequestReviewer(
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -23,5 +26,11 @@ data class PullRequestReviewer(
     var statusCodeId: Long,
 
     @Column(name = "reviewed_at")
-    var reviewedAt: LocalDateTime? = null
-) 
+    var reviewedAt: LocalDateTime? = null,
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    val createdAt: LocalDateTime = LocalDateTime.now(),
+
+    @Column(name = "updated_at")
+    var updatedAt: LocalDateTime? = null
+)

@@ -32,6 +32,21 @@ class BlobProcessor(
         private const val SMALL_LIMIT: Long = 5L * 1024 * 1024
     }
 
+    /**
+     * 파일(Blob) 객체를 처리합니다.
+     * - 크기가 SMALL_LIMIT 이하인 경우 메모리로 읽어와 BlobMetaAnalyzer로 분석 후 저장
+     * - 크기가 SMALL_LIMIT 초과인 경우 스트림으로 읽어와 BlobMetaAnalyzer로 샘플링 분석 후 저장
+     * - Blob 데이터를 외부 스토리지에 업로드
+     * - Blob 및 BlobTree 정보를 데이터베이스에 저장
+     *
+     * @param repositoryId 저장소 ID
+     * @param commitHash 커밋 해시
+     * @param path 파일 경로
+     * @param name 파일 이름
+     * @param objectId JGit ObjectId (Blob ID)
+     * @param repo JGit Repository 객체
+     * @param commitInstant 커밋 시각
+     */
     fun processFile(
         repositoryId: Long,
         commitHash: String,
@@ -125,6 +140,29 @@ class BlobProcessor(
         fileTypeCodeId = null,
         lastModifiedAt = commitInstant
     )
+
+    fun ensureParentDirs(repositoryId: Long, commitHash: String, fullPath: String, commitInstant: Instant) {
+        val segments = fullPath.split('/').dropLast(1)
+        if (segments.isEmpty()) return
+        var acc = mutableListOf<String>()
+        for (seg in segments) {
+            acc += seg
+            val dirPath = acc.joinToString("/")
+            val tree = BlobTree(
+                repositoryId = repositoryId,
+                commitHash = CommitHash(commitHash),
+                path = FilePath(dirPath),
+                name = seg,
+                isDirectory = true,
+                fileHash = null,
+                size = 0L,
+                depth = dirPath.count { it == '/' },
+                fileTypeCodeId = null,
+                lastModifiedAt = commitInstant
+            )
+            treeRepo.save(tree)
+        }
+    }
 
     fun isSymlink(mode: FileMode) = mode == FileMode.SYMLINK
 }

@@ -75,4 +75,14 @@ class GlobalExceptionHandler {
         )
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response)
     }
+
+    @ExceptionHandler(SecurityException::class)
+    fun handleSecurityException(ex: SecurityException): ResponseEntity<ErrorResponse> {
+        val response = ErrorResponse(
+            code = "FORBIDDEN",
+            message = ex.message ?: "Forbidden",
+            timestamp = Instant.now()
+        )
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response)
+    }
 }

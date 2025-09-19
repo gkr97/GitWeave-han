@@ -19,6 +19,10 @@ data class PullRequestComment(
     @JoinColumn(name = "author_id", nullable = false)
     val author: User,
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "thread_id")
+    var thread: PullRequestThread? = null,
+
     @Column(columnDefinition = "TEXT", nullable = false)
     var content: String,
 
@@ -33,4 +37,4 @@ data class PullRequestComment(
 
     @Column(name = "created_at", nullable = false)
     val createdAt: LocalDateTime = LocalDateTime.now()
-) 
+)

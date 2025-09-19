@@ -89,39 +89,29 @@ class RepositoryRestController(
     }
 
     @Operation(summary = "Repository download")
-    @GetMapping("/{repoId}/download")
+    @GetMapping("/{repoId}/download", produces = ["application/zip"])
     fun downloadRepository(
         @PathVariable repoId: Long,
         @RequestParam(required = false, defaultValue = "main") branch: String,
-        @AuthenticationPrincipal userDetails: CustomUserDetails
+        @AuthenticationPrincipal userDetails: CustomUserDetails?
     ): ResponseEntity<StreamingResponseBody> {
-        val downloadInfo = repositoryDownloadQueryService.prepareDownload(repoId, branch, userDetails.getUserId())
-        val securityContext = SecurityContextHolder.getContext()
+        val userId = userDetails?.getUserId()
+        val downloadInfo = repositoryDownloadQueryService.prepareDownload(repoId, branch, userId)
+
         val streamingBody = StreamingResponseBody { os ->
-            val task = Runnable {
-                val (input, process) = downloadInfo.streamSupplier()
-                try {
-                    input.use { it.copyTo(os); os.flush() }
-                    val exitCode = process.waitFor()
-                    if (exitCode != 0) {
-                        logger.error { "git archive 실패(exitCode=$exitCode)" }
-                        os.write("error".toByteArray())
-                    }
-                } catch (e: Exception) {
-                    logger.error(e) { "다운로드 중 오류" }
-                    os.write("error".toByteArray())
-                } finally {
-                    process.destroyForcibly()
-                    os.close()
-                }
+            val ins = downloadInfo.streamSupplier.invoke()
+            ins.use {
+                it.copyTo(os)
+                os.flush()
             }
-            DelegatingSecurityContextRunnable(task, securityContext).run()
         }
+
         return ResponseEntity.ok()
             .header("Content-Disposition", "attachment; filename=\"${downloadInfo.filename}\"")
             .header("Content-Type", "application/zip")
             .body(streamingBody)
     }
+
 
     @Operation(summary = "Repository update")
     @PatchMapping("/{repoId}")

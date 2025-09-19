@@ -12,7 +12,9 @@ INSERT INTO common_code (id, code, name, description, created_at) VALUES
                                                                       (10, 'LANG', '프로그래밍언어', '주요 언어', NOW()),
                                                                       (11, 'LICENSE', '라이선스', '오픈소스/비오픈소스', NOW()),
                                                                       (12, 'ISSUE_STATUS', '이슈상태', '이슈 상태', NOW()),
-                                                                      (13, 'COMMENT_TYPE', '코멘트유형', '코멘트 유형', NOW());
+                                                                      (13, 'COMMENT_TYPE', '코멘트유형', '코멘트 유형', NOW()),
+                                                                      (14, 'PR_REVIEW_STATUS', 'PR 리뷰 상태', 'PR 리뷰 상태', NOW()),
+                                                                      (15, 'PR_FILE_STATUS', 'PR 파일 상태', 'PR 파일 변경 상태 매핑', NOW());
 
 -- PROVIDER
 INSERT INTO common_code_detail (id, code_group_id, code, name, sort_order, is_active, created_at) VALUES
@@ -106,3 +108,19 @@ INSERT INTO common_code_detail (id, code_group_id, code, name, sort_order, is_ac
                                                                                                       (121, 13, 'review', '리뷰', 2, 1, NOW()),
                                                                                                       (122, 13, 'inline', '라인별코멘트', 3, 1, NOW()),
                                                                                                       (123, 13, 'issue', '이슈코멘트', 4, 1, NOW());
+
+-- PR 리뷰 상태  상세
+INSERT INTO common_code_detail (id, code_group_id, code, name, sort_order, is_active, created_at) VALUES
+                                                                                                      (130, 14, 'pending', '대기',   1, 1, NOW()),
+                                                                                                      (131, 14, 'approved', '승인',  2, 1, NOW());
+
+INSERT INTO common_code_detail (id, code_group_id, code, name, sort_order, is_active, created_at) VALUES
+                                                                                                      (132, 14, 'changes_requested', '변경요청', 3, 1, NOW()),
+                                                                                                      (133, 14, 'dismissed', '무시됨', 4, 1, NOW());
+
+INSERT INTO common_code_detail (id, code_group_id, code, name, sort_order, is_active, created_at) VALUES
+                                                                                                      (140, 15, 'ADDED',    '추가',     1, 1, NOW()),
+                                                                                                      (141, 15, 'MODIFIED', '수정',     2, 1, NOW()),
+                                                                                                      (142, 15, 'DELETED',  '삭제',     3, 1, NOW()),
+                                                                                                      (143, 15, 'RENAMED',  '이름변경', 4, 1, NOW()),
+                                                                                                      (144, 15, 'COPIED',   '복사',     5, 1, NOW());

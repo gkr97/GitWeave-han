@@ -37,7 +37,10 @@ class DynamoCommitQueryAdapter(
      * @return CommitResponse 객체 또는 null (존재하지 않는 경우)
      */
     override fun getLatestCommit(repositoryId: Long, branch: String): CommitResponse? {
-        log.info { "[CommitQueryRepository] 최신 커밋 조회 시작 - repositoryId=$repositoryId, branch=$branch" }
+
+        val normBranch = if (branch.startsWith("refs/heads/")) branch else "refs/heads/$branch"
+
+        log.info { "[CommitQueryRepository] 최신 커밋 조회 시작 - repositoryId=$repositoryId, branch=$branch → norm=$normBranch" }
 
         val resp = dynamoDbClient.query {
             it.tableName(tableName)
@@ -48,7 +51,7 @@ class DynamoCommitQueryAdapter(
                 .filterExpression("PK = :pk AND #type = :commit AND sealed = :sealedTrue")
                 .expressionAttributeValues(
                     mapOf(
-                        ":branch" to AttributeValue.fromS(branch),
+                        ":branch" to AttributeValue.fromS(normBranch),
                         ":pk" to AttributeValue.fromS("REPO#$repositoryId"),
                         ":commit" to AttributeValue.fromS("commit"),
                         ":sealedTrue" to AttributeValue.fromBool(true),
@@ -59,13 +62,12 @@ class DynamoCommitQueryAdapter(
         }
 
         val item = resp.items().firstOrNull() ?: run {
-            log.warn { "[CommitQueryRepository] 커밋 없음 - repositoryId=$repositoryId, branch=$branch" }
+            log.warn { "[CommitQueryRepository] 커밋 없음 - repositoryId=$repositoryId, branch=$normBranch" }
             return null
         }
 
         val sk = item["SK"]?.s()
-        val commitHash = sk?.split("#")?.getOrNull(1)
-        if (commitHash.isNullOrBlank()) {
+        val commitHash = sk?.split("#")?.getOrNull(1) ?: run {
             log.error { "[CommitQueryRepository] 커밋 해시 파싱 실패 - SK=$sk" }
             return null
         }
@@ -84,6 +86,7 @@ class DynamoCommitQueryAdapter(
         )
     }
 
+
     /**
      * 특정 커밋 해시의 정보를 조회합니다.
      * @param repositoryId 레포지토리 ID
@@ -99,7 +102,6 @@ class DynamoCommitQueryAdapter(
                 it.tableName(tableName)
                     .keyConditionExpression("#pk = :pk AND begins_with(#sk, :sk)")
                     .expressionAttributeNames(mapOf("#pk" to "PK", "#sk" to "SK", "#type" to "type"))
-                    // sealed=true 만 노출
                     .filterExpression("#type = :commit AND sealed = :sealedTrue")
                     .expressionAttributeValues(
                         mapOf(
