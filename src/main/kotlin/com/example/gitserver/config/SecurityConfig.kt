@@ -16,6 +16,9 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.security.web.context.request.async.WebAsyncManagerIntegrationFilter
 
+/**
+ * Spring Security 설정
+ */
 @Configuration
 @EnableWebSecurity
 class SecurityConfig(
@@ -43,13 +46,13 @@ class SecurityConfig(
                         "/swagger-ui/**",
                         "/v3/api-docs/**",
                         "/h2-console/**",
-                        "/graphql",
                         "/graphiql/**",
                         "/vendor/**",
                         "/static/**",
                         "/webjars/**",
                         "/{ownerId}/{repo}.git/**",
-                        "/api/v1/repositories/*/download"
+                        "/api/v1/repositories/*/download",
+                        "/error"
                     ).permitAll()
                     .anyRequest().authenticated()
             }

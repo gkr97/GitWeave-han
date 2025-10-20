@@ -1,24 +1,22 @@
 package com.example.gitserver.module.repository.application.query
 
 import com.example.gitserver.common.pagination.*
-import com.example.gitserver.module.gitindex.application.query.CommitQueryService
 import com.example.gitserver.module.repository.application.query.model.*
 import com.example.gitserver.module.repository.domain.Repository
 import com.example.gitserver.module.repository.exception.*
 import com.example.gitserver.module.repository.infrastructure.persistence.BranchKeysetRepository
-import com.example.gitserver.module.repository.infrastructure.persistence.BranchRepository
 import com.example.gitserver.module.repository.infrastructure.persistence.RepositoryRepository
 import com.example.gitserver.module.repository.interfaces.dto.*
 import mu.KotlinLogging
+import org.springframework.cache.annotation.Cacheable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.ZoneOffset
+import java.time.Instant
 
 @Service
 class BranchQueryService(
-    private val branchRepository: BranchRepository,
     private val repositoryRepository: RepositoryRepository,
-    private val commitService: CommitQueryService,
     private val branchKeysetRepository: BranchKeysetRepository,
     private val repositoryAccessService: RepositoryAccessService
 ) {
@@ -28,12 +26,17 @@ class BranchQueryService(
 
     /**
      * 브랜치 목록 조회 (키셋 페이징/GraphQL 커넥션)
-     * - 페이징/정렬/권한 동일 규칙
-     * - 키셋 조회 실패 → KeysetQueryFailedException
-     * - 커서 인코딩 실패 → CursorEncodeFailedException
-     * - 커밋 미존재 → HeadCommitNotFoundException
+     * - 커밋 개별 조회 제거(N+1 근원 제거)
+     * - headCommit 은 GraphQL 필드 리졸버(DataLoader)에서 일괄 로드
      */
     @Transactional(readOnly = true)
+    @Cacheable(
+        cacheNames = ["repoBranches"],
+        key = "T(java.util.Objects).hash(" +
+                "#repositoryId, " +
+                "#paging.pageSize, #paging.after, #paging.before, " +
+                "#sortBy, #sortDirection, #keyword, #onlyMine, #currentUserId)"
+    )
     fun getBranchConnection(
         repositoryId: Long,
         paging: KeysetPaging,
@@ -56,7 +59,7 @@ class BranchQueryService(
         // 2) 페이징 검증
         try {
             PagingValidator.validate(paging)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             throw InvalidPagingParameterException("키셋 페이징 파라미터가 유효하지 않습니다: $paging")
         }
         if (onlyMine && currentUserId == null) {
@@ -124,10 +127,6 @@ class BranchQueryService(
         return BranchResponseConnection(edges = edges, pageInfo = pageInfo, totalCount = null)
     }
 
-    /**
-     * BranchRow → 커서 문자열 변환
-     * - 정렬 기준에 맞는 키로 커서 페이로드 생성
-     */
     private fun branchCursorFromRow(row: BranchRow, sort: BranchSortBy, dir: SortDirection): String {
         val payload = when (sort) {
             BranchSortBy.LAST_COMMIT_AT -> CursorPayload(
@@ -152,33 +151,27 @@ class BranchQueryService(
 
     /**
      * BranchRow → BranchResponse 변환
-     * - 커밋 없으면 HeadCommitNotFoundException
+     * - 커밋은 GraphQL 필드 리졸버에서 DataLoader로 배치 로드
+     * - 여기서는 placeholder만 설정
      */
-    private fun toBranchResponse(repositoryId: Long, row: BranchRow): BranchResponse {
+    private fun toBranchResponse(
+        repositoryId: Long,
+        row: BranchRow
+    ): BranchResponse {
         val qualifiedName = row.name
         val shortName = qualifiedName.toShortBranchName()
-
-        val commitDto: CommitResponse = try {
-            val byHash = row.headCommitHash?.let {
-                log.debug { "[toBranchResponse] 커밋 조회(by hash): rowId=${row.id} hash=$it" }
-                commitService.getCommitInfo(repositoryId, it)
-            }
-            val byBranchLatest = if (byHash == null) {
-                log.debug { "[toBranchResponse] 커밋 조회(최신 by branch): rowId=${row.id} ref=$qualifiedName" }
-                commitService.getLatestCommitHash(repositoryId, qualifiedName)
-            } else null
-
-            (byHash ?: byBranchLatest) ?: throw HeadCommitNotFoundException(qualifiedName)
-        } catch (e: HeadCommitNotFoundException) {
-            throw e
-        } catch (e: Exception) {
-            log.error(e) { "[toBranchResponse] 커밋 조회 중 예외" }
-            throw HeadCommitNotFoundException(qualifiedName)
-        }
 
         val creatorDto = row.creatorId?.let { uid ->
             RepositoryUserResponse(uid, row.creatorNickname ?: "", row.creatorProfileImageUrl)
         }
+
+
+        val placeholderCommit = CommitResponse(
+            hash = row.headCommitHash ?: "",
+            message = "",
+            committedAt = Instant.EPOCH.atOffset(ZoneOffset.UTC).toLocalDateTime(),
+            author = RepositoryUserResponse(0L, "unknown", null)
+        )
 
         return BranchResponse(
             name = shortName,
@@ -186,8 +179,9 @@ class BranchQueryService(
             isDefault = row.isDefault,
             isProtected = row.isProtected,
             createdAt = row.createdAt.atOffset(ZoneOffset.UTC).toLocalDateTime(),
-            headCommit = commitDto,
-            creator = creatorDto
+            headCommit = placeholderCommit,
+            creator = creatorDto,
+            _repositoryId = repositoryId
         )
     }
 }

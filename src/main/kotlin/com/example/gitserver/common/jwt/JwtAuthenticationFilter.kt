@@ -22,20 +22,33 @@ class JwtAuthenticationFilter(
     private val jwtProvider: JwtProvider,
     private val userDetailsService: CustomUserDetailsService,
 ) : OncePerRequestFilter() {
-    override fun doFilterInternal(
-        request: HttpServletRequest,
-        response: HttpServletResponse,
-        filterChain: FilterChain
-    ) {
-        val authHeader = request.getHeader("Authorization")
-        val token = authHeader?.takeIf { it.startsWith("Bearer ") }?.substring(7)
-        if (!token.isNullOrBlank() && jwtProvider.validateToken(token)) {
-            val userId = jwtProvider.getUserId(token)
-            val userDetails: UserDetails = userDetailsService.loadUserById(userId)
-            val authentication = UsernamePasswordAuthenticationToken(userDetails, null, userDetails.authorities)
-            authentication.details = WebAuthenticationDetailsSource().buildDetails(request)
-            SecurityContextHolder.getContext().authentication = authentication
+
+    override fun doFilterInternal(request: HttpServletRequest, response: HttpServletResponse, chain: FilterChain) {
+        try {
+            val token = request.getHeader("Authorization")
+                ?.takeIf { it.startsWith("Bearer ") }?.substring(7)
+                ?: request.cookies?.firstOrNull { it.name == "ACCESS_TOKEN" }?.value
+
+            if (!token.isNullOrBlank() && jwtProvider.validateToken(token)) {
+                val userId = jwtProvider.getUserId(token)
+                val userDetails: UserDetails = userDetailsService.loadUserById(userId)
+                val auth = UsernamePasswordAuthenticationToken(userDetails, null, userDetails.authorities)
+                auth.details = WebAuthenticationDetailsSource().buildDetails(request)
+                SecurityContextHolder.getContext().authentication = auth
+            }
+        } catch (_: Exception) {
         }
-        filterChain.doFilter(request, response)
+        chain.doFilter(request, response)
+    }
+
+    /** 인증이 필요하지 않은 경로를 필터링합니다. */
+    override fun shouldNotFilter(request: HttpServletRequest): Boolean {
+        val uri = request.requestURI
+        return uri.startsWith("/api/v1/auth/") ||
+                uri == "/error" ||
+                uri.startsWith("/swagger-ui/") ||
+                uri.startsWith("/v3/api-docs/") ||
+                uri.startsWith("/h2-console/") ||
+                uri.startsWith("/graphiql")
     }
 }

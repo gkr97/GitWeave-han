@@ -1,27 +1,21 @@
-// file: com/example/gitserver/module/pullrequest/application/query/PullRequestFileQueryService.kt
 package com.example.gitserver.module.pullrequest.application.query
 
-import com.example.gitserver.module.gitindex.domain.port.GitDiffPort
-import com.example.gitserver.module.pullrequest.application.query.model.PullRequestFileItem
+import com.example.gitserver.module.common.application.service.CommonCodeCacheService
 import com.example.gitserver.module.pullrequest.application.query.model.PullRequestFileDiffItem
+import com.example.gitserver.module.pullrequest.application.query.model.PullRequestFileItem
 import com.example.gitserver.module.pullrequest.infrastructure.persistence.PullRequestFileJdbcRepository
 import com.example.gitserver.module.pullrequest.infrastructure.persistence.PullRequestRepository
-import com.example.gitserver.module.common.service.CommonCodeCacheService
-import com.example.gitserver.module.gitindex.infrastructure.git.GitPathResolver
-import com.example.gitserver.module.pullrequest.domain.PullRequest
 import com.example.gitserver.module.repository.exception.RepositoryNotFoundException
 import com.example.gitserver.module.repository.infrastructure.persistence.CollaboratorRepository
 import mu.KotlinLogging
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import kotlin.math.abs
 
 @Service
 class PullRequestFileQueryService(
     private val pullRequestRepository: PullRequestRepository,
     private val collaboratorRepository: CollaboratorRepository,
     private val commonCodeCacheService: CommonCodeCacheService,
-    private val gitPathResolver: GitPathResolver,
     private val fileJdbcRepo: PullRequestFileJdbcRepository,
 ) {
     private val log = KotlinLogging.logger {}
@@ -36,7 +30,18 @@ class PullRequestFileQueryService(
     @Transactional(readOnly = true)
     fun listFiles(prId: Long, currentUserId: Long?): List<PullRequestFileItem> {
         val pr = authorizeAndLoad(prId, currentUserId)
-        return fileJdbcRepo.findFiles(pr.id)
+        val rows = fileJdbcRepo.findFiles(pr.id)
+        return rows.map { r ->
+            val safePath = when {
+                hasPathField(r) -> r.path ?: r.oldPath
+                else -> r.path ?: r.oldPath
+            } ?: throw IllegalStateException("PR($prId) file row has neither path nor oldPath (id=${r.id})")
+            if (hasPathField(r)) {
+                r.copy(path = safePath)
+            } else {
+                r.copy(path = safePath)
+            }
+        }
     }
 
     /**
@@ -49,7 +54,12 @@ class PullRequestFileQueryService(
     @Transactional(readOnly = true)
     fun listDiffs(prId: Long, currentUserId: Long?): List<PullRequestFileDiffItem> {
         val pr = authorizeAndLoad(prId, currentUserId)
-        return fileJdbcRepo.findDiffs(pr.id)
+        val rows = fileJdbcRepo.findDiffs(pr.id)
+        return rows.map { r ->
+            val safePath = r.filePath ?: r.oldPath
+            ?: throw IllegalStateException("PR($prId) diff row has neither filePath nor oldPath (id=${r.id})")
+            r.copy(filePath = safePath)
+        }
     }
 
     /**
@@ -76,4 +86,10 @@ class PullRequestFileQueryService(
             }
         }
 
+    private fun hasPathField(item: PullRequestFileItem): Boolean =
+        try {
+            item::class.members.any { it.name == "path" }
+        } catch (_: Throwable) {
+            false
+        }
 }

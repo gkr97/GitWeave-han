@@ -22,6 +22,29 @@ class DynamoGitIndexTxAdapter(
     @Value("\${aws.dynamodb.gitIndexTable}") private val tableName: String
 ) : IndexTxRepository {
 
+    /**
+     * 블럭만 저장합니다.
+     */
+    override fun saveBlobOnly(blob: Blob) {
+        val item = mutableMapOf(
+            "PK" to AttributeValue.fromS("REPO#${blob.repositoryId}"),
+            "SK" to AttributeValue.fromS("BLOB#${blob.hash.value}"),
+            "type" to AttributeValue.fromS("blob"),
+            "created_at" to AttributeValue.fromS(blob.createdAt.toString()),
+            "hash" to AttributeValue.fromS(blob.hash.value),
+            "path" to AttributeValue.fromS(blob.path?.value ?: ""),
+            "mime_type" to AttributeValue.fromS(blob.mimeType ?: ""),
+            "is_binary" to AttributeValue.fromBool(blob.isBinary),
+            "file_size" to AttributeValue.fromN(blob.fileSize.toString()),
+            "line_count" to AttributeValue.fromN(blob.lineCount?.toString() ?: "0"),
+            "external_storage_key" to AttributeValue.fromS(blob.externalStorageKey)
+        )
+        blob.extension?.takeIf { it.isNotBlank() }?.let {
+            item["extension"] = AttributeValue.fromS(it)
+        }
+
+        dynamoDbClient.putItem { it.tableName(tableName).item(item) }
+    }
 
     /**
      * 블롭과 블롭 트리를 원자적으로 저장합니다.
@@ -94,14 +117,13 @@ class DynamoGitIndexTxAdapter(
         )
         commit.authorId?.let { item["author_id"] = AttributeValue.fromN(it.toString()) }
 
-        dynamoDbClient.putItem { it.tableName(tableName).item(item) }
-         try {
-             dynamoDbClient.putItem {
-                 it.tableName(tableName).item(item)
-                   .conditionExpression("attribute_not_exists(PK) AND attribute_not_exists(SK)")
-             }
-         } catch (_: ConditionalCheckFailedException) {
-         }
+        try {
+            dynamoDbClient.putItem {
+                it.tableName(tableName).item(item)
+                  .conditionExpression("attribute_not_exists(PK) AND attribute_not_exists(SK)")
+            }
+        } catch (_: ConditionalCheckFailedException) {
+        }
     }
 
     /**

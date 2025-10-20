@@ -3,11 +3,11 @@ package com.example.gitserver.module.gitindex.application.query
 import com.example.gitserver.module.gitindex.domain.port.TreeQueryRepository
 import com.example.gitserver.module.repository.interfaces.dto.TreeNodeResponse
 import org.springframework.stereotype.Service
-import java.util.*
+import java.util.Locale
 
 @Service
 class FileTreeQueryService(
-    private val treeQueryRepository : TreeQueryRepository,
+    private val treeQueryRepository: TreeQueryRepository
 ) {
     /**
      * 저장소 파일/폴더 트리 조회
@@ -19,13 +19,10 @@ class FileTreeQueryService(
         branch: String?
     ): List<TreeNodeResponse> {
         val hash = requireNotNull(commitHash) { "commitHash는 필수입니다." }
-
-        // 경로 정규화
         val normPath = path?.trim()?.trim('/')?.ifEmpty { null }
 
         val nodes =
             if (normPath == null) {
-                // 루트는 depth=0 기준 인덱스 전용 쿼리 사용
                 treeQueryRepository.getFileTreeAtRoot(repositoryId, hash, branch)
             } else {
                 treeQueryRepository.getFileTree(repositoryId, hash, normPath, branch)

@@ -1,6 +1,5 @@
 package com.example.gitserver.module.user.infrastructure.redis
 
-
 import com.example.gitserver.module.user.application.command.service.RefreshTokenService
 import com.example.gitserver.module.user.application.query.RefreshTokenQuery
 import com.example.gitserver.module.user.domain.vo.RefreshToken
@@ -22,12 +21,17 @@ class RefreshTokenRedisRepository(
      * @param token 저장할 RefreshToken
      */
     override fun save(token: RefreshToken) {
+        val keyUser = "refresh_token:${token.userId}"
         val ttl = Duration.between(Instant.now(), token.expiredAt)
-        redisTemplate.opsForValue().set(
-            "refresh_token:${token.userId}",
-            token.value,
-            ttl
-        )
+
+        val prev = redisTemplate.opsForValue().get(keyUser)
+        if (prev != null) {
+            redisTemplate.delete("refresh_token_value:$prev")
+        }
+
+        redisTemplate.opsForValue().set(keyUser, token.value, ttl)
+        redisTemplate.opsForValue().set("refresh_token_value:${token.value}", token.userId.toString(), ttl)
+
         logger.debug("Token size: ${token.value.length} bytes")
     }
 
@@ -38,10 +42,11 @@ class RefreshTokenRedisRepository(
      * @return RefreshToken 객체 또는 null
      */
     override fun findByUserId(userId: Long): RefreshToken? {
-        val value = redisTemplate.opsForValue().get("refresh_token:$userId")
-        return value?.let {
-            RefreshToken(userId, it, Instant.now().plusSeconds(60 * 60 * 24 * 14))
-        }
+        val keyUser = "refresh_token:$userId"
+        val value = redisTemplate.opsForValue().get(keyUser) ?: return null
+        val ttlSec = redisTemplate.getExpire(keyUser) ?: -2
+        val expiredAt = if (ttlSec > 0) Instant.now().plusSeconds(ttlSec) else Instant.now()
+        return RefreshToken(userId, value, expiredAt)
     }
 
     /**
@@ -50,6 +55,31 @@ class RefreshTokenRedisRepository(
      * @param userId 삭제할 사용자 ID
      */
     override fun delete(userId: Long) {
-        redisTemplate.delete("refresh_token:$userId")
+        val keyUser = "refresh_token:$userId"
+        val prev = redisTemplate.opsForValue().get(keyUser)
+        if (prev != null) {
+            redisTemplate.delete("refresh_token_value:$prev")
+        }
+        redisTemplate.delete(keyUser)
+    }
+
+    /**
+     * Redis에서 value에 해당하는 RefreshToken을 조회합니다.
+     *
+     * @param value 조회할 RefreshToken 값
+     * @return RefreshToken 객체 또는 null
+     */
+    override fun findByValue(value: String): RefreshToken? {
+        val keyVal = "refresh_token_value:$value"
+        val userIdStr = redisTemplate.opsForValue().get(keyVal) ?: return null
+        val userId = userIdStr.toLongOrNull() ?: return null
+
+        val keyUser = "refresh_token:$userId"
+        val currentValue = redisTemplate.opsForValue().get(keyUser) ?: return null
+        if (currentValue != value) return null
+
+        val ttlSec = redisTemplate.getExpire(keyUser) ?: -2
+        val expiredAt = if (ttlSec > 0) Instant.now().plusSeconds(ttlSec) else Instant.now()
+        return RefreshToken(userId, value, expiredAt)
     }
 }

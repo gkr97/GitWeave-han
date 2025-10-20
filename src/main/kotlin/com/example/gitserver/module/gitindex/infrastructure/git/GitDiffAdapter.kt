@@ -3,7 +3,11 @@ package com.example.gitserver.module.gitindex.infrastructure.git
 import com.example.gitserver.module.gitindex.domain.port.GitDiffPort
 import com.example.gitserver.module.gitindex.domain.vo.ChangedFile
 import com.example.gitserver.module.gitindex.domain.vo.FileChangeStatus
-import org.eclipse.jgit.diff.*
+import mu.KotlinLogging
+import org.eclipse.jgit.diff.DiffEntry
+import org.eclipse.jgit.diff.DiffFormatter
+import org.eclipse.jgit.diff.EditList
+import org.eclipse.jgit.diff.RawText
 import org.eclipse.jgit.lib.*
 import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.revwalk.RevWalk
@@ -18,7 +22,7 @@ import kotlin.math.min
 @Service
 class GitDiffAdapter : GitDiffPort {
 
-    private val log = mu.KotlinLogging.logger {}
+    private val log = KotlinLogging.logger {}
 
     override fun listChangedFiles(
         bareGitPath: String,
@@ -31,11 +35,22 @@ class GitDiffAdapter : GitDiffPort {
 
         val entries = diffCommits(repo, base, head, detectRenames = true)
 
+        entries.mapNotNull { e ->
+            if (e.newMode?.bits == FileMode.GITLINK.bits || e.oldMode?.bits == FileMode.GITLINK.bits) {
+                log.debug { "[PR diff] skip submodule entry: ${e.oldPath} -> ${e.newPath}" }
+                return@mapNotNull null
+            }
+            if (e.newMode?.bits == FileMode.SYMLINK.bits || e.oldMode?.bits == FileMode.SYMLINK.bits) {
+                log.debug { "[PR diff] skip symlink entry: ${e.oldPath} -> ${e.newPath}" }
+                return@mapNotNull null
+            }
 
-        entries.map { e ->
             val status = toStatus(e)
-            val isBinary = isBinary(repo, e)
-            val (add, del) = if (!isBinary) countAddDel(repo, e) else 0 to 0
+            val isBinary = safeIsBinary(repo, e)
+
+            val (add, del) = if (!isBinary && e.changeType != DiffEntry.ChangeType.DELETE) {
+                safeCountAddDel(repo, e)
+            } else 0 to 0
 
             ChangedFile(
                 path = when (e.changeType) {
@@ -50,8 +65,8 @@ class GitDiffAdapter : GitDiffPort {
                 isBinary = isBinary,
                 additions = add,
                 deletions = del,
-                headBlobHash = e.newId.toObjectIdOrNull()?.name(),
-                baseBlobHash = e.oldId.toObjectIdOrNull()?.name()
+                headBlobHash = e.newId.toRealObjectIdOrNull()?.name(),
+                baseBlobHash = e.oldId.toRealObjectIdOrNull()?.name()
             )
         }
     }
@@ -73,15 +88,20 @@ class GitDiffAdapter : GitDiffPort {
             }
         } ?: return ByteArray(0)
 
-        if (isBinary(repo, target)) return ByteArray(0)
+        if (safeIsBinary(repo, target)) return ByteArray(0)
 
-        val out = ByteArrayOutputStream()
-        DiffFormatter(out).use { fmt ->
-            fmt.setRepository(repo)
-            fmt.setDetectRenames(true)
-            fmt.format(target)
+        return try {
+            val out = ByteArrayOutputStream()
+            DiffFormatter(out).use { fmt ->
+                fmt.setRepository(repo)
+                fmt.setDetectRenames(true)
+                fmt.format(target)
+            }
+            out.toByteArray()
+        } catch (e: Exception) {
+            log.warn(e) { "[PR diff] renderPatch failed for $path" }
+            ByteArray(0)
         }
-        out.toByteArray()
     }
 
     override fun resolveCommitHash(bareGitPath: String, refOrSha: String): String =
@@ -120,13 +140,7 @@ class GitDiffAdapter : GitDiffPort {
         DiffFormatter(DisabledOutputStream.INSTANCE).use { df ->
             df.setRepository(repo)
             df.setDetectRenames(detectRenames)
-            val entries = df.scan(oldTree, newTree)
-
-            if (!detectRenames) return entries
-
-            val rd = RenameDetector(repo)
-            rd.addAll(entries)
-            return rd.compute()
+            return df.scan(oldTree, newTree)
         }
     }
 
@@ -143,32 +157,56 @@ class GitDiffAdapter : GitDiffPort {
         DiffEntry.ChangeType.COPY -> FileChangeStatus.COPIED
     }
 
-    private fun isBinary(repo: Repository, e: DiffEntry): Boolean {
-        val loader = e.newId.toObjectIdOrNull()?.let { repo.open(it, Constants.OBJ_BLOB) }
-            ?: e.oldId.toObjectIdOrNull()?.let { repo.open(it, Constants.OBJ_BLOB) }
-            ?: return false
-        val bytes = loader.openStream().use { ins ->
-            val buf = ByteArray(8192)
-            val n = ins.read(buf)
-            if (n <= 0) ByteArray(0) else buf.copyOf(min(n, buf.size))
+    private fun sideObjectIdForBinaryCheck(e: DiffEntry): ObjectId? =
+        when (e.changeType) {
+            DiffEntry.ChangeType.DELETE -> e.oldId.toRealObjectIdOrNull()
+            DiffEntry.ChangeType.ADD,
+            DiffEntry.ChangeType.COPY,
+            DiffEntry.ChangeType.RENAME,
+            DiffEntry.ChangeType.MODIFY -> e.newId.toRealObjectIdOrNull() ?: e.oldId.toRealObjectIdOrNull()
+            else -> e.newId.toRealObjectIdOrNull() ?: e.oldId.toRealObjectIdOrNull()
         }
-        return RawText.isBinary(bytes)
+
+    private fun safeIsBinary(repo: Repository, e: DiffEntry): Boolean {
+        val oid = sideObjectIdForBinaryCheck(e) ?: return false
+        return try {
+            val loader = repo.open(oid, Constants.OBJ_BLOB)
+            loader.openStream().use { ins ->
+                val buf = ByteArray(8192)
+                val n = ins.read(buf)
+                val bytes = if (n <= 0) ByteArray(0) else buf.copyOf(min(n, buf.size))
+                RawText.isBinary(bytes)
+            }
+        } catch (ex: org.eclipse.jgit.errors.MissingObjectException) {
+            log.warn(ex) { "[PR diff] missing blob ${oid.name} — treat as binary & continue" }
+            true
+        } catch (ex: Exception) {
+            log.warn(ex) { "[PR diff] blob open failed ${oid.name} — treat as binary & continue" }
+            true
+        }
     }
 
-    private fun countAddDel(repo: Repository, e: DiffEntry): Pair<Int, Int> =
-        DiffFormatter(DisabledOutputStream.INSTANCE).use { fmt ->
-            fmt.setRepository(repo)
-            fmt.setDetectRenames(true)
-            val edits: EditList = fmt.toFileHeader(e).toEditList()
-            var add = 0
-            var del = 0
-            for (ed in edits) {
-                add += ed.endB - ed.beginB
-                del += ed.endA - ed.beginA
+    private fun safeCountAddDel(repo: Repository, e: DiffEntry): Pair<Int, Int> =
+        try {
+            DiffFormatter(DisabledOutputStream.INSTANCE).use { fmt ->
+                fmt.setRepository(repo)
+                fmt.setDetectRenames(true)
+                val edits: EditList = fmt.toFileHeader(e).toEditList()
+                var add = 0
+                var del = 0
+                for (ed in edits) {
+                    add += (ed.endB - ed.beginB)
+                    del += (ed.endA - ed.beginA)
+                }
+                add to del
             }
-            add to del
+        } catch (ex: Exception) {
+            log.warn(ex) { "[PR diff] countAddDel failed for ${e.changeType}:${e.oldPath}->${e.newPath}" }
+            0 to 0
         }
 
-    private fun AbbreviatedObjectId?.toObjectIdOrNull(): ObjectId? =
-        runCatching { this?.toObjectId() }.getOrNull()
+    private fun AbbreviatedObjectId?.toRealObjectIdOrNull(): ObjectId? {
+        val oid = runCatching { this?.toObjectId() }.getOrNull() ?: return null
+        return if (oid == ObjectId.zeroId()) null else oid
+    }
 }

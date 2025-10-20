@@ -12,6 +12,9 @@ import com.fasterxml.jackson.module.kotlin.readValue
 import mu.KotlinLogging
 import java.nio.file.Files
 
+/**
+ * SQS에서 Git 이벤트 메시지를 폴링하고 처리하는 리스너입니다.
+ */
 @Component
 class GitEventSqsListener(
     private val sqsClient: SqsClient,

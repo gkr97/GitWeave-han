@@ -1,6 +1,6 @@
 package com.example.gitserver.module.pullrequest.application.service
 
-import com.example.gitserver.module.common.service.CommonCodeCacheService
+import com.example.gitserver.module.common.application.service.CommonCodeCacheService
 import com.example.gitserver.module.gitindex.domain.port.GitDiffPort
 import com.example.gitserver.module.pullrequest.application.query.model.PullRequestFileRow
 import com.example.gitserver.module.pullrequest.infrastructure.persistence.PullRequestFileJdbcIndexRepository

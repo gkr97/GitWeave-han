@@ -3,7 +3,6 @@ package com.example.gitserver.module.gitindex.application.command.handler
 import com.example.gitserver.module.gitindex.application.command.IndexRepositoryCommand
 import com.example.gitserver.module.gitindex.application.command.IndexRepositoryHeadCommand
 import com.example.gitserver.module.gitindex.application.command.IndexRepositoryPushCommand
-import com.example.gitserver.module.gitindex.application.internal.FullTreeSnapshotMaterializer
 import com.example.gitserver.module.gitindex.application.internal.ScanDiff
 import com.example.gitserver.module.gitindex.application.internal.TreeScanIndexer
 import com.example.gitserver.module.gitindex.domain.Commit
@@ -41,9 +40,10 @@ class IndexRepositoryCommandHandler(
     private val failurePublisher: IndexingFailurePublisher,
     private val userRepository: UserRepository,
     private val txRepo: IndexTxRepository,
-    private val snapshotter: FullTreeSnapshotMaterializer,
 ) {
+    companion object { private const val EMPTY_SHA1 = "0000000000000000000000000000000000000000" }
 
+    /** 인덱싱 커맨드 처리 */
     @Transactional
     fun handle(cmd: IndexRepositoryCommand) {
         when (cmd) {
@@ -60,8 +60,7 @@ class IndexRepositoryCommandHandler(
         }
     }
 
-    companion object { private const val EMPTY_SHA1 = "0000000000000000000000000000000000000000" }
-
+    /** 저장소 HEAD 커밋 인덱싱 */
     private fun indexRepository(repositoryId: Long, workDir: Path) {
         val git = try { Git.open(workDir.toFile()) }
         catch (e: Exception) {
@@ -90,14 +89,6 @@ class IndexRepositoryCommandHandler(
                             basePath = "", commitInstant = commit.committerIdent.whenAsInstant
                         )
 
-                        snapshotter.materialize(
-                            repositoryId = repositoryId,
-                            commitHash = commit.name,
-                            treeId = commit.tree.id,
-                            repo = g.repository,
-                            at = commit.committerIdent.whenAsInstant
-                        )
-
                         finalizeCommit(
                             repositoryId = repositoryId,
                             commit = commit,
@@ -113,6 +104,7 @@ class IndexRepositoryCommandHandler(
         }
     }
 
+    /** 푸시 이벤트 인덱싱 */
     private fun indexPush(event: GitEvent, gitDir: Path) {
         val git = try { Git.open(gitDir.toFile()) }
         catch (e: Exception) {
@@ -151,14 +143,6 @@ class IndexRepositoryCommandHandler(
                                 treeIndexer.scan(event.repositoryId, c.name, c.tree.id, repo, "", c.committerIdent.whenAsInstant)
                             }
 
-                            snapshotter.materialize(
-                                repositoryId = event.repositoryId,
-                                commitHash = c.name,
-                                treeId = c.tree.id,
-                                repo = repo,
-                                at = c.committerIdent.whenAsInstant
-                            )
-
                             finalizeCommit(event.repositoryId, c, vo, result, branch, null)
                         }
                         log.info { "[Index] 커밋 인덱싱 완료 - commit=${c.name}, tookMs=$took" }
@@ -190,14 +174,6 @@ class IndexRepositoryCommandHandler(
                             treeIndexer.scan(event.repositoryId, c.name, c.tree.id, repo, "", c.committerIdent.whenAsInstant)
                         }
 
-                        snapshotter.materialize(
-                            repositoryId = event.repositoryId,
-                            commitHash = c.name,
-                            treeId = c.tree.id,
-                            repo = repo,
-                            at = c.committerIdent.whenAsInstant
-                        )
-
                         finalizeCommit(event.repositoryId, c, vo, result, branch, event.oldrev?.let { CommitHash(it) })
                     }
 
@@ -207,6 +183,7 @@ class IndexRepositoryCommandHandler(
         }
     }
 
+    /** 커밋 확정 및 브랜치 Ref 업데이트 */
     private fun finalizeCommit(
         repositoryId: Long,
         commit: RevCommit,
@@ -238,6 +215,7 @@ class IndexRepositoryCommandHandler(
         }
     }
 
+    /** RevCommit -> Commit 도메인 변환 */
     private fun buildCommitVo(repositoryId: Long, commit: RevCommit, branch: String): Commit {
         val authorEmail = commit.authorIdent.emailAddress
         val author = userRepository.findByEmailAndIsDeletedFalse(authorEmail)
@@ -263,6 +241,7 @@ class IndexRepositoryCommandHandler(
         )
     }
 
+    /** 브랜치 이름 정규화 */
     private fun normalizeBranch(input: String?): String =
         if (input.isNullOrBlank()) {
             log.debug { "[Index] 브랜치 누락 - 기본 main 사용" }
@@ -275,6 +254,7 @@ class IndexRepositoryCommandHandler(
             normalized
         }
 
+    /** 브랜치 매핑만 저장 */
     private fun saveBranchMappingOnly(
         repositoryId: Long,
         commitId: ObjectId,
@@ -299,6 +279,7 @@ class IndexRepositoryCommandHandler(
         }
     }
 
+    /** 알려진 커밋까지 커밋 수집 */
     private fun collectUntilKnown(repo: Repository, start: ObjectId, isKnown: (String) -> Boolean): List<RevCommit> {
         val acc = mutableListOf<RevCommit>()
         RevWalk(repo).use { rw ->
@@ -309,6 +290,7 @@ class IndexRepositoryCommandHandler(
         return acc
     }
 
+    /** oldId ~ newId 사이의 커밋 리스트 반환 (oldId 제외, newId 포함) */
     private fun revListOldToNew(repo: Repository, oldId: ObjectId, newId: ObjectId): List<RevCommit> {
         RevWalk(repo).use { rw ->
             rw.sort(RevSort.TOPO, true); rw.sort(RevSort.REVERSE, true)
@@ -319,6 +301,7 @@ class IndexRepositoryCommandHandler(
         }
     }
 
+    /** MDC 설정 후 블록 실행 */
     private inline fun <T> withMDC(repositoryId: Long, branch: String, commit: String, block: () -> T): T {
         MDC.put("repoId", repositoryId.toString())
         MDC.put("branch", branch)

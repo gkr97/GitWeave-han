@@ -1,7 +1,7 @@
 package com.example.gitserver.module.gitindex.domain.event
 
 data class GitEvent(
-    val eventType: String,
+    val eventType: String = "UNKNOWN",
     val repositoryId: Long,
     val ownerId: Long,
     val name: String,

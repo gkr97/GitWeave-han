@@ -32,7 +32,7 @@ class PullRequestCommitMappingService(
             PullRequestCommit(
                 pullRequest = pr,
                 commitHash = h,
-                position = idx
+                seq = idx
             )
         }
         commitRepo.saveAll(entities)

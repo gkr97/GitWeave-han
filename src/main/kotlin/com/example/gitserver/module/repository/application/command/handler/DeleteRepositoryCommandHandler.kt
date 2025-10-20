@@ -1,11 +1,13 @@
 package com.example.gitserver.module.repository.application.command.handler
 
 import com.example.gitserver.module.repository.application.command.DeleteRepositoryCommand
-import com.example.gitserver.module.repository.exception.NotRepositoryOwnerException
+import com.example.gitserver.module.repository.domain.event.RepositoryDeleted
+import com.example.gitserver.module.repository.domain.policy.RepoAccessPolicy
 import com.example.gitserver.module.repository.exception.RepositoryNotFoundException
 import com.example.gitserver.module.repository.infrastructure.persistence.RepositoryRepository
 import com.example.gitserver.module.user.infrastructure.persistence.UserRepository
 import mu.KotlinLogging
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
@@ -13,7 +15,9 @@ import java.time.LocalDateTime
 @Service
 class DeleteRepositoryCommandHandler(
     private val repositoryRepository: RepositoryRepository,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val access: RepoAccessPolicy,
+    private val events: ApplicationEventPublisher
 ) {
     private val log = KotlinLogging.logger {}
 
@@ -27,7 +31,7 @@ class DeleteRepositoryCommandHandler(
      */
     @Transactional
     fun handle(command: DeleteRepositoryCommand) {
-        log.info { "[Repo-Delete] 삭제 요청: repoId=${command.repositoryId}, by=${command.requesterEmail}" }
+        log.info { "[Repo-Delete] 요청: repoId=${command.repositoryId}, by=${command.requesterEmail}" }
 
         val user = userRepository.findByEmailAndIsDeletedFalse(command.requesterEmail)
             ?: throw IllegalArgumentException("인증된 사용자가 없음: ${command.requesterEmail}")
@@ -35,9 +39,9 @@ class DeleteRepositoryCommandHandler(
         val repo = repositoryRepository.findById(command.repositoryId)
             .orElseThrow { RepositoryNotFoundException(command.repositoryId) }
 
-        if (repo.owner.id != user.id) {
+        if (!access.isOwner(repo.id, user.id)) {
             log.warn { "[Repo-Delete] 소유자 아님: repoId=${repo.id}, ownerId=${repo.owner.id}, req=${user.id}" }
-            throw NotRepositoryOwnerException()
+            throw IllegalAccessException("레포지터리 소유자가 아닙니다.")
         }
 
         if (repo.isDeleted) {
@@ -48,7 +52,9 @@ class DeleteRepositoryCommandHandler(
         repo.isDeleted = true
         repo.updatedAt = LocalDateTime.now()
         repositoryRepository.save(repo)
-        log.info { "[Repo-Delete] 삭제 완료: repoId=${repo.id}, by=${user.id}" }
 
+        events.publishEvent(RepositoryDeleted(repo.id))
+
+        log.info { "[Repo-Delete] 완료: repoId=${repo.id}, by=${user.id}" }
     }
 }

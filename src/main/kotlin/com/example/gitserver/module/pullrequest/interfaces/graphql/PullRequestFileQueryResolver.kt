@@ -41,12 +41,12 @@ class PullRequestFileQueryResolver(
         val userId = user?.getUserId()
 
         val files = fileService.listFiles(prId, userId)
-        val fileMeta = files.firstOrNull { it.filePath == filePath }
+        val fileMeta = files.firstOrNull { it.path == filePath }
             ?: error("PR($prId)에서 파일 메타데이터를 찾을 수 없습니다. path=$filePath")
 
         if (fileMeta.isBinary) {
             return UnifiedDiffMapper.toResponse(
-                filePath = fileMeta.filePath,
+                filePath = fileMeta.path,
                 oldPath = fileMeta.oldPath,
                 status = fileMeta.status,
                 isBinary = true,
@@ -73,7 +73,7 @@ class PullRequestFileQueryResolver(
         } else emptyList()
 
         return UnifiedDiffMapper.toResponse(
-            filePath = fileMeta.filePath,
+            filePath = fileMeta.path,
             oldPath = fileMeta.oldPath,
             status = fileMeta.status,
             isBinary = false,

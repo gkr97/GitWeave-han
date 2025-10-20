@@ -78,7 +78,7 @@ type RepositoryResponse {
     createdAt: String!
     lastUpdatedAt: String
     owner: RepositoryUserResponse!
-    isBookmarked: Boolean!
+    isStarred: Boolean!
     isOwner: Boolean!
     isInvited: Boolean!
     contributors: [RepositoryUserResponse!]!
@@ -99,7 +99,7 @@ type RepositoryListItem {
     visibility: String!
     lastUpdatedAt: String
     isOwner: Boolean!
-    isBookmarked: Boolean!
+    isStarred: Boolean!
     isInvited: Boolean!
     ownerInfo: RepositoryUserResponse
     language: String

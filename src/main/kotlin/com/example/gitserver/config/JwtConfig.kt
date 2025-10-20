@@ -5,6 +5,9 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 
+/**
+ * JWT 설정
+ */
 @Configuration
 class JwtConfig(
     @Value("\${jwt.secret}") private val secret: String,

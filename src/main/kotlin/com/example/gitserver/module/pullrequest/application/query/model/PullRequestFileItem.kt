@@ -2,7 +2,7 @@ package com.example.gitserver.module.pullrequest.application.query.model
 
 data class PullRequestFileItem(
     val id: Long,
-    val filePath: String,
+    val path: String,
     val oldPath: String?,
     val status: String,
     val additions: Int,

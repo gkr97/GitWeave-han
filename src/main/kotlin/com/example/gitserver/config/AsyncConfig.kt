@@ -6,6 +6,9 @@ import org.springframework.scheduling.annotation.EnableAsync
 import org.springframework.security.concurrent.DelegatingSecurityContextExecutor
 import java.util.concurrent.Executor
 
+/**
+ * 비동기 처리 설정
+ */
 @Configuration
 @EnableAsync
 class AsyncConfig {

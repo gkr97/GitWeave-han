@@ -1,10 +1,10 @@
 package com.example.gitserver.module.repository.application.query
 
 import com.example.gitserver.common.util.GitRefUtils
-import com.example.gitserver.module.common.service.CommonCodeCacheService
-import com.example.gitserver.module.gitindex.application.query.CommitQueryService
+import com.example.gitserver.module.common.application.service.CommonCodeCacheService
 import com.example.gitserver.module.gitindex.application.query.FileContentQueryService
 import com.example.gitserver.module.gitindex.application.query.FileTreeQueryService
+import com.example.gitserver.module.gitindex.domain.port.GitRepositoryPort
 import com.example.gitserver.module.repository.exception.*
 import com.example.gitserver.module.repository.infrastructure.persistence.BranchRepository
 import com.example.gitserver.module.repository.infrastructure.persistence.CollaboratorRepository
@@ -23,8 +23,8 @@ class RepositoryFileQueryService(
     private val repositoryRepository: RepositoryRepository,
     private val collaboratorRepository: CollaboratorRepository,
     private val commonCodeCacheService: CommonCodeCacheService,
-    private val commitService: CommitQueryService,
     private val branchRepository: BranchRepository,
+    private val gitRepositoryPort: GitRepositoryPort,
 ) {
 
     /**
@@ -93,10 +93,11 @@ class RepositoryFileQueryService(
             throw BranchNotFoundException(repositoryId, fullRef)
         }
 
-        val latest = commitService.getLatestCommitHash(repositoryId, fullRef)
-            ?: throw HeadCommitNotFoundException(short)
-
-        return latest.hash
+        return try {
+            gitRepositoryPort.getHeadCommitHash(repo, short)
+        } catch (e: Exception) {
+            throw HeadCommitNotFoundException(short)
+        }
     }
 
     /**

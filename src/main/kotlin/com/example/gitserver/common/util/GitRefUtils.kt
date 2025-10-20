@@ -1,5 +1,8 @@
 package com.example.gitserver.common.util
 
+/**
+ * Git Ref 관련 유틸리티
+ */
 object GitRefUtils {
 
     fun toFullRef(branch: String): String {

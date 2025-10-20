@@ -6,114 +6,97 @@ import org.springframework.stereotype.Service
 import org.springframework.web.multipart.MultipartFile
 import software.amazon.awssdk.core.sync.RequestBody
 import software.amazon.awssdk.services.s3.S3Client
+import software.amazon.awssdk.services.s3.model.GetObjectRequest
 import software.amazon.awssdk.services.s3.model.ObjectCannedACL
 import software.amazon.awssdk.services.s3.model.PutObjectRequest
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
-import java.util.*
+import software.amazon.awssdk.services.s3.presigner.S3Presigner
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest
+import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest
+import java.time.Duration
 
 @Service
 class S3Uploader(
     private val s3Client: S3Client,
-
-    @Value("\${cloud.aws.s3.bucket}")
-    private val bucket: String,
-
-    @Value("\${cloud.aws.s3.endpoint}")
-    private val endpointUrl: String
+    private val s3Presigner: S3Presigner,
+    @Value("\${cloud.aws.s3.bucket}") private val bucket: String
 ) {
+
     /**
-     * S3에 파일을 업로드하고 URL을 반환합니다.
-     * @param file 업로드할 파일
-     * @param path S3 버킷 내의 경로
-     * @return 업로드된 파일의 URL
-     * @throws S3FileException 파일 유효성 검사 실패 시 예외 발생
+     * 이미지 파일을 S3에 업로드하고 공개 URL을 반환합니다.
      */
-    fun upload(file: MultipartFile, path: String): String {
-        val originalFilename = file.originalFilename
-            ?: throw S3FileException("INVALID_FILENAME", "파일명이 없습니다.")
-
-        val extension = getExtension(originalFilename)
-        validateImageExtension(extension)
+    fun upload(file: MultipartFile, fixedKey: String): String {
+        val ext = getExtension(file.originalFilename ?: "")
+        validateImageExtension(ext)
         validateFileSize(file)
-        validateFilename(originalFilename)
-        validateContentType(file, extension)
+        validateContentType(file, ext)
 
-        val normalizedPath = if (path.endsWith("/")) path else "$path/"
-        val key = "$normalizedPath${UUID.randomUUID()}.$extension"
-        val encodedKey = URLEncoder.encode(key, StandardCharsets.UTF_8.toString())
-
-        val putRequest = PutObjectRequest.builder()
+        val put = PutObjectRequest.builder()
             .bucket(bucket)
-            .key(key)
+            .key(fixedKey)
             .contentType(file.contentType)
-            .acl(ObjectCannedACL.PUBLIC_READ) // 추후 presigned URL로 대체 할예정
+            .cacheControl("public, max-age=31536000, immutable")
+            .acl(ObjectCannedACL.PUBLIC_READ)
             .build()
 
-        s3Client.putObject(putRequest, RequestBody.fromInputStream(file.inputStream, file.size))
+        s3Client.putObject(put, RequestBody.fromInputStream(file.inputStream, file.size))
 
-        return "$endpointUrl/$bucket/$encodedKey"
+        return s3Client.utilities().getUrl { it.bucket(bucket).key(fixedKey) }.toExternalForm()
     }
 
     /**
-     * 파일 이름에서 확장자를 추출합니다.
-     * @param filename 파일 이름
-     * @return 파일 확장자 (소문자)
+     * 바이트 배열을 S3에 업로드합니다.
      */
-    private fun getExtension(filename: String): String {
-        return filename.substringAfterLast('.', "").lowercase()
+    fun uploadBytes(key: String, bytes: ByteArray, contentType: String) {
+        val put = PutObjectRequest.builder()
+            .bucket(bucket)
+            .key(key)
+            .contentType(contentType)
+            .build()
+        s3Client.putObject(put, RequestBody.fromBytes(bytes))
     }
 
     /**
-     * 파일 크기를 검증합니다.
-     * @param file 업로드할 파일
-     * @param maxSizeBytes 최대 허용 파일 크기 (기본값: 5MB)
-     * @throws S3FileException 파일 크기가 허용 범위를 초과하는 경우 예외 발생
+     * 지정된 키에 대한 presigned GET URL을 생성합니다.
      */
+    fun generatePresignedGetUrl(key: String, expiry: Duration = Duration.ofMinutes(10)): String {
+        val get = GetObjectRequest.builder().bucket(bucket).key(key).build()
+        val req = GetObjectPresignRequest.builder()
+            .signatureDuration(expiry)
+            .getObjectRequest(get)
+            .build()
+        return s3Presigner.presignGetObject(req).url().toString()
+    }
+
+    /**
+     * 바이트 배열을 업로드하고 presigned GET URL을 반환합니다.
+     */
+    fun uploadBytesAndGetPresignedGetUrl(
+        key: String,
+        bytes: ByteArray,
+        contentType: String = "image/png",
+        expiry: Duration = Duration.ofDays(7)
+    ): String {
+        uploadBytes(key, bytes, contentType)
+        return generatePresignedGetUrl(key, expiry)
+    }
+
+    private fun getExtension(filename: String) = filename.substringAfterLast('.', "").lowercase()
+
     private fun validateFileSize(file: MultipartFile, maxSizeBytes: Long = 5 * 1024 * 1024) {
         if (file.size > maxSizeBytes) {
             throw S3FileException("FILE_TOO_LARGE", "허용된 파일 크기(5MB)를 초과했습니다.")
         }
     }
 
-    /**
-     * 파일 이름을 검증합니다.
-     * @param filename 검증할 파일 이름
-     * @throws S3FileException 파일 이름이 유효하지 않은 경우 예외 발생
-     */
-    private fun validateFilename(filename: String) {
-        if (filename.contains("..") || filename.contains("/") || filename.contains("\\")) {
-            throw S3FileException("INVALID_FILENAME", "올바르지 않은 파일명입니다.")
-        }
-    }
-
-    /**
-     * 이미지 파일의 확장자를 검증합니다.
-     * @param ext 파일 확장자
-     * @throws S3FileException 허용되지 않은 확장자인 경우 예외 발생
-     */
     private fun validateImageExtension(ext: String) {
         val allowed = setOf("png", "jpg", "jpeg", "webp")
-        if (ext !in allowed) {
-            throw S3FileException("INVALID_EXTENSION", "허용되지 않은 이미지 확장자입니다: .$ext")
-        }
+        if (ext !in allowed) throw S3FileException("INVALID_EXTENSION", "허용되지 않은 이미지 확장자입니다: .$ext")
     }
 
-    /**
-     * 파일의 Content-Type이 확장자와 일치하는지 검증합니다.
-     * @param file 업로드할 파일
-     * @param ext 파일 확장자
-     * @throws S3FileException Content-Type이 확장자와 일치하지 않는 경우 예외 발생
-     */
     private fun validateContentType(file: MultipartFile, ext: String) {
         val contentType = file.contentType ?: ""
-        val validMapping = mapOf(
-            "jpg" to "image/jpeg",
-            "jpeg" to "image/jpeg",
-            "png" to "image/png",
-            "webp" to "image/webp"
-        )
-        if (validMapping[ext] != contentType) {
+        val valid = mapOf("jpg" to "image/jpeg", "jpeg" to "image/jpeg", "png" to "image/png", "webp" to "image/webp")
+        if (valid[ext] != contentType) {
             throw S3FileException("CONTENT_TYPE_MISMATCH", "Content-Type이 확장자와 일치하지 않습니다.")
         }
     }

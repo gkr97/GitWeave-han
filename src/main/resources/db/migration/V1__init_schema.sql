@@ -70,14 +70,14 @@ CREATE TABLE `branch` (
                           CONSTRAINT `fk_branch_creator_id` FOREIGN KEY (`creator_id`) REFERENCES `user` (`id`)
 ) COMMENT='브랜치';
 
-CREATE TABLE `repository_bookmark` (
-                                       `user_id` BIGINT NOT NULL COMMENT '유저 PK',
-                                       `repository_id` BIGINT NOT NULL COMMENT '저장소 PK',
-                                       `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시각',
-                                       PRIMARY KEY (`user_id`, `repository_id`),
-                                       CONSTRAINT `fk_repository_bookmark_user_id` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`),
-                                       CONSTRAINT `fk_repository_bookmark_repository_id` FOREIGN KEY (`repository_id`) REFERENCES `repository` (`id`)
-) COMMENT='저장소 즐겨찾기';
+CREATE TABLE `repository_star` (
+                        `user_id` BIGINT NOT NULL COMMENT '유저 PK',
+                        `repository_id` BIGINT NOT NULL COMMENT '저장소 PK',
+                        `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '스타 시각',
+                        PRIMARY KEY (`user_id`, `repository_id`),
+                        CONSTRAINT `fk_repository_star_user_id` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`),
+                        CONSTRAINT `fk_repository_star_repository_id` FOREIGN KEY (`repository_id`) REFERENCES `repository` (`id`)
+) COMMENT='저장소 Star';
 
 CREATE TABLE `repository_stats` (
                                     `repository_id` BIGINT NOT NULL COMMENT '저장소 PK',

@@ -22,23 +22,20 @@ extend type Query {
 
     repositoryPullRequestMergeCheck(prId: Long!): MergeCheckResult!
 
-    repositoryPullRequestFileDiff(repositoryId: Long!, prId: Long!, filePath: String!): FileDiffResponse!
-
-    commitsConnection(
-        first: Int
-        after: String
-        last: Int
-        before: String
-    ): CommitConnection!
+    repositoryPullRequestFileDiff(
+        repositoryId: Long!
+        prId: Long!
+        filePath: String!
+    ): FileDiffResponse!
 }
 
-type CommitConnection {
-    edges: [CommitEdge!]!
+type CommitResponseConnection {
+    edges: [CommitResponseEdge!]!
     pageInfo: PageInfo!
     totalCount: Int
 }
 
-type CommitEdge {
+type CommitResponseEdge {
     cursor: String!
     node: CommitResponse!
 }
@@ -78,6 +75,12 @@ type PullRequestDetail {
     createdAt: String!
     updatedAt: String
     commits: [CommitResponse!]!
+    commitsConnection(
+        first: Int
+        after: String
+        last: Int
+        before: String
+    ): CommitResponseConnection!
 }
 
 type PullRequestFileItem {

@@ -9,8 +9,10 @@ import com.example.gitserver.module.user.infrastructure.persistence.UserReposito
 import com.example.gitserver.module.user.infrastructure.sqs.EmailVerificationProducer
 import com.example.gitserver.module.user.interfaces.dto.EmailVerificationMessage
 import mu.KotlinLogging
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.web.util.UriComponentsBuilder
 import java.time.LocalDateTime
 
 @Service
@@ -18,14 +20,10 @@ class EmailVerifcationService(
     private val userRepository: UserRepository,
     private val emailVerificationRepository: EmailVerificationRepository,
     private val emailVerificationProducer: EmailVerificationProducer,
+    @Value("\${app.frontend.base-url}") private val frontendBaseUrl: String,
 ) {
     private val log = KotlinLogging.logger {}
 
-    /**
-     * 이메일 인증 메일 발송
-     * @param user 인증 대상 사용자
-     * @throws EmailVerificationException 이메일 인증 토큰 생성 실패 시 예외 발생
-     */
     @Transactional
     fun sendVerificationEmail(user: User) {
         val token = generateVerificationToken()
@@ -37,8 +35,14 @@ class EmailVerifcationService(
         )
         emailVerificationRepository.save(emailVerification)
 
+        val verificationUrl = UriComponentsBuilder
+            .fromHttpUrl(frontendBaseUrl)
+            .path("/email-verify")
+            .queryParam("token", token)
+            .build()
+            .toUriString()
+
         val subject = "[GitServer] 이메일 인증 안내"
-        val verificationUrl = "https://your-frontend-url.com/email-verify?token=$token"
         val body = """
             안녕하세요, GitServer 입니다.
             
@@ -60,35 +64,16 @@ class EmailVerifcationService(
         log.info { "이메일 인증 메일 발송 완료: user=${user.email}, token=$token" }
     }
 
-    /**
-     * 이메일 인증 토큰 검증
-     * @param token 이메일 인증 토큰
-     * @throws EmailVerificationException 인증 실패 시 예외 발생
-     */
     @Transactional
     fun verifyToken(token: String) {
         val verification = emailVerificationRepository.findByToken(token)
-            ?: run {
-                log.warn { "이메일 인증 실패: 존재하지 않는 토큰 [$token]" }
-                throw EmailVerificationException(
-                    code = "INVALID_TOKEN",
-                    message = "잘못된 토큰입니다."
-                )
-            }
+            ?: throw EmailVerificationException(code = "INVALID_TOKEN", message = "잘못된 토큰입니다.")
 
         if (verification.isUsed) {
-            log.warn { "이메일 인증 실패: 이미 사용된 토큰 [$token], user=${verification.user.email}" }
-            throw EmailVerificationException(
-                code = "TOKEN_ALREADY_USED",
-                message = "이미 사용된 토큰입니다."
-            )
+            throw EmailVerificationException(code = "TOKEN_ALREADY_USED", message = "이미 사용된 토큰입니다.")
         }
         if (verification.isExpired()) {
-            log.warn { "이메일 인증 실패: 만료된 토큰 [$token], user=${verification.user.email}" }
-            throw EmailVerificationException(
-                code = "TOKEN_EXPIRED",
-                message = "만료된 토큰입니다."
-            )
+            throw EmailVerificationException(code = "TOKEN_EXPIRED", message = "만료된 토큰입니다.")
         }
 
         val user = verification.user
@@ -99,5 +84,4 @@ class EmailVerifcationService(
         emailVerificationRepository.save(verification)
         log.info { "이메일 인증 성공: user=${user.email}, token=$token" }
     }
-
 }

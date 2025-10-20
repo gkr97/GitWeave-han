@@ -33,4 +33,7 @@ interface CollaboratorRepository: JpaRepository<Collaborator, Long> {
     """)
     fun findAcceptedByUserIdAndOwnerId(userId: Long, ownerId: Long): List<Collaborator>
 
+    fun findOwnerIdByRepositoryId(repositoryId: Long): Long?
+
+
 }

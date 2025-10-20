@@ -1,4 +1,3 @@
-// src/main/kotlin/com/example/gitserver/module/gitindex/interfaces/JGitHttpController.kt
 package com.example.gitserver.module.gitindex.interfaces
 
 import com.example.gitserver.module.gitindex.domain.event.GitEvent
@@ -21,6 +20,9 @@ import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
 
+/**
+ * JGit를 사용하여 Git HTTP 프로토콜을 처리하는 컨트롤러입니다.
+ */
 @RestController
 class JGitHttpController(
     private val repoAccessService: RepositoryAccessQueryService,

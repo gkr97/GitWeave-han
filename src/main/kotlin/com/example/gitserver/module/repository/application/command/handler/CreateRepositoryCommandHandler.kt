@@ -1,7 +1,9 @@
 package com.example.gitserver.module.repository.application.command.handler
 
 import com.example.gitserver.common.util.GitRefUtils.toFullRef
-import com.example.gitserver.module.common.service.CommonCodeCacheService
+import com.example.gitserver.module.common.application.service.CommonCodeCacheService
+import com.example.gitserver.module.common.cache.RepoCacheEvictor
+import com.example.gitserver.module.common.cache.registerRepoCacheEvictionAfterCommit
 import com.example.gitserver.module.gitindex.application.query.CommitQueryService
 import com.example.gitserver.module.gitindex.domain.event.GitEvent
 import com.example.gitserver.module.gitindex.domain.port.GitRepositoryPort
@@ -10,12 +12,14 @@ import com.example.gitserver.module.repository.domain.Branch
 import com.example.gitserver.module.repository.domain.Collaborator
 import com.example.gitserver.module.repository.domain.Repository
 import com.example.gitserver.module.repository.domain.event.GitEventPublisher
+import com.example.gitserver.module.repository.domain.event.RepositoryCreated
 import com.example.gitserver.module.repository.exception.*
 import com.example.gitserver.module.repository.infrastructure.persistence.BranchRepository
 import com.example.gitserver.module.repository.infrastructure.persistence.CollaboratorRepository
 import com.example.gitserver.module.repository.infrastructure.persistence.RepositoryRepository
 import com.example.gitserver.module.user.infrastructure.persistence.UserRepository
 import mu.KotlinLogging
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionSynchronization
@@ -32,6 +36,8 @@ class CreateRepositoryCommandHandler(
     private val collaboratorRepository: CollaboratorRepository,
     private val userRepository: UserRepository,
     private val commitService: CommitQueryService,
+    private val evictor: RepoCacheEvictor,
+    private val events: ApplicationEventPublisher
 
     ) {
     private val log = KotlinLogging.logger {}
@@ -146,7 +152,8 @@ class CreateRepositoryCommandHandler(
             TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
                 override fun afterCommit() {
                     try {
-                        gitEventPublisher.publish(
+                        events.publishEvent(RepositoryCreated(repository.id, repository.owner.id, repository.name))
+                         gitEventPublisher.publish(
                             GitEvent(
                                 eventType = "REPO_CREATED",
                                 repositoryId = repository.id,
@@ -162,7 +169,7 @@ class CreateRepositoryCommandHandler(
                 }
             })
         }
-
+        registerRepoCacheEvictionAfterCommit(evictor, evictAll = true)
         return repository
     }
 }

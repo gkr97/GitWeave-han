@@ -4,6 +4,9 @@ import org.springframework.mail.SimpleMailMessage
 import org.springframework.mail.javamail.JavaMailSender
 import org.springframework.stereotype.Component
 
+/**
+ * 메일 전송 유틸리티 클래스
+ */
 @Component
 class MailUtils(
     private val mailSender: JavaMailSender

@@ -8,6 +8,9 @@ import com.example.gitserver.module.pullrequest.application.command.handler.Pull
 import org.springframework.stereotype.Service
 import java.nio.file.Path
 
+/**
+ * Git 이벤트에 따른 레포지토리 인덱싱 작업을 실행하는 서비스 클래스입니다.
+ */
 @Service
 class IndexingJobExecutor(
     private val handler: IndexRepositoryCommandHandler,

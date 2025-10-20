@@ -14,6 +14,10 @@ import org.springframework.security.core.userdetails.UserDetailsService
 import org.springframework.stereotype.Component
 import org.springframework.web.filter.OncePerRequestFilter
 
+/**
+ * Git PAT 인증 필터입니다.
+ * Git 클라이언트가 .git 경로에 접근할 때 Authorization 헤더를 검사하여 인증을 수행합니다.
+ */
 @Component
 class GitPatAuthenticationFilter(
     private val userRepository: UserRepository,

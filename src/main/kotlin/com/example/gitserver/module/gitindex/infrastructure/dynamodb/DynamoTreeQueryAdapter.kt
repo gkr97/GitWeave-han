@@ -83,7 +83,12 @@ class DynamoTreeQueryAdapter(
      * 특정 커밋 해시와 경로에 대한 파일/폴더 트리 조회
      * @param path null이면 루트 디렉토리
      */
-    override fun getFileTree(repoId: Long, commitHash: String, path: String?, branch: String?): List<TreeNodeResponse> {
+    override fun getFileTree(
+        repoId: Long,
+        commitHash: String,
+        path: String?,
+        branch: String?
+    ): List<TreeNodeResponse> {
         val normPath = normalizePath(path)
 
         val treePrefix = if (normPath == null) {
@@ -92,48 +97,122 @@ class DynamoTreeQueryAdapter(
             "TREE#$commitHash#$normPath/"
         }
 
-        val response = dynamoDbClient.query {
-            it.tableName(tableName)
-                .keyConditionExpression("PK = :pk AND begins_with(SK, :skPrefix)")
-                .expressionAttributeValues(
-                    mapOf(
-                        ":pk" to AttributeValue.fromS("REPO#$repoId"),
-                        ":skPrefix" to AttributeValue.fromS(treePrefix)
+        val targetDepth = if (normPath == null) 0 else normPath.count { it == '/' } + 1
+
+        val collected = mutableListOf<Map<String, AttributeValue>>()
+        var lastEvaluatedKey: Map<String, AttributeValue>? = null
+
+        do {
+            val resp = dynamoDbClient.query {
+                it.tableName(tableName)
+                    .keyConditionExpression("PK = :pk AND begins_with(SK, :skPrefix)")
+                    .expressionAttributeValues(
+                        mapOf(
+                            ":pk" to AttributeValue.fromS("REPO#$repoId"),
+                            ":skPrefix" to AttributeValue.fromS(treePrefix)
+                        )
                     )
-                )
+                    .projectionExpression("SK,#n,is_directory,size,commit_hash")
+                    .expressionAttributeNames(mapOf("#n" to "name"))
+                    .exclusiveStartKey(lastEvaluatedKey)
+            }
+            resp.items()
+                .asSequence()
+                .filter { it["depth"]?.n() == targetDepth.toString() }
+                .forEach { collected += it }
+
+            lastEvaluatedKey = resp.lastEvaluatedKey()
+        } while (!lastEvaluatedKey.isNullOrEmpty())
+
+        if (collected.isEmpty()) return emptyList()
+
+        val hashes: Set<String> = collected
+            .map { it["commit_hash"]?.s() ?: commitHash }
+            .toSet()
+
+        fun commitKeyOf(h: String): Map<String, AttributeValue> {
+            val sk = if (branch.isNullOrBlank()) {
+                "COMMIT#$h"
+            } else {
+                val ref = GitRefUtils.toFullRefOrNull(branch)
+                if (ref != null) "COMMIT#$h#$ref" else "COMMIT#$h"
+            }
+            return mapOf(
+                "PK" to AttributeValue.fromS("REPO#$repoId"),
+                "SK" to AttributeValue.fromS(sk)
+            )
         }
 
-        val depth = if (normPath == null) 0 else normPath.count { it == '/' } + 1
+        val commitMap: MutableMap<String, Map<String, AttributeValue>?> = hashes.associateWith { null }.toMutableMap()
 
-        return response.items()
-            .filter { it["depth"]?.n() == depth.toString() }
-            .mapNotNull { item ->
-                val sk = item["SK"]?.s() ?: return@mapNotNull null
-                val childPath = sk.split("#", limit = 3).getOrNull(2) ?: return@mapNotNull null
-
-                val lastCommitHash = item["commit_hash"]?.s() ?: commitHash
-
-                val commitItem = getCommitItem(repoId, lastCommitHash, branch)
-                val committer = commitItem?.let { c ->
-                    RepositoryUserResponse(
-                        userId = c["author_id"]?.n()?.toLongOrNull() ?: -1,
-                        nickname = c["author_name"]?.s() ?: "unknown",
-                        profileImageUrl = c["author_profile_image_url"]?.s()
+        val chunkedKeys = hashes.map { commitKeyOf(it) }.chunked(100)
+        try {
+            for (chunk in chunkedKeys) {
+                val resp = dynamoDbClient.batchGetItem { b ->
+                    b.requestItems(
+                        mapOf(
+                            tableName to software.amazon.awssdk.services.dynamodb.model.KeysAndAttributes.builder()
+                                .keys(chunk)
+                                .projectionExpression("message,committed_at,author_id,author_name,author_profile_image_url")
+                                .build()
+                        )
                     )
                 }
+                val items = resp.responses()[tableName].orEmpty()
+                items.forEach { row ->
+                    val sk = row["SK"]?.s() ?: return@forEach
+                    val h = sk.substringAfter("COMMIT#").substringBefore("#")
+                    commitMap[h] = row
+                }
 
-                TreeNodeResponse(
-                    name = item["name"]?.s() ?: return@mapNotNull null,
-                    path = childPath,
-                    isDirectory = item["is_directory"]?.bool() ?: false,
-                    size = item["size"]?.n()?.toLongOrNull(),
-                    lastCommitHash = lastCommitHash,
-                    lastCommitMessage = commitItem?.get("message")?.s(),
-                    lastCommittedAt = commitItem?.get("committed_at")?.s(),
-                    lastCommitter = committer
+                if (resp.hasUnprocessedKeys() && resp.unprocessedKeys().isNotEmpty()) {
+                    val retry = dynamoDbClient.batchGetItem { b ->
+                        b.requestItems(resp.unprocessedKeys())
+                    }
+                    retry.responses()[tableName].orEmpty().forEach { row ->
+                        val sk = row["SK"]?.s() ?: return@forEach
+                        val h = sk.substringAfter("COMMIT#").substringBefore("#")
+                        commitMap[h] = row
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            log.warn(e) { "[getFileTree] batchGetItem 실패, 단건 조회로 폴백 repo=$repoId" }
+            hashes.forEach { h ->
+                if (commitMap[h] == null) {
+                    commitMap[h] = getCommitItem(repoId, h, branch)
+                }
+            }
+        }
+
+        return collected.mapNotNull { item ->
+            val sk = item["SK"]?.s() ?: return@mapNotNull null
+            val childPath = sk.split("#", limit = 3).getOrNull(2) ?: return@mapNotNull null
+
+            val lastHash = item["commit_hash"]?.s() ?: commitHash
+            val c = commitMap[lastHash] ?: getCommitItem(repoId, lastHash, branch) // 최종 안전장치
+
+            val committer = c?.let { row ->
+                RepositoryUserResponse(
+                    userId = row["author_id"]?.n()?.toLongOrNull() ?: -1L,
+                    nickname = row["author_name"]?.s() ?: "unknown",
+                    profileImageUrl = row["author_profile_image_url"]?.s()
                 )
             }
+
+            TreeNodeResponse(
+                name = item["name"]?.s() ?: return@mapNotNull null,
+                path = childPath,
+                isDirectory = item["is_directory"]?.bool() ?: false,
+                size = item["size"]?.n()?.toLongOrNull(),
+                lastCommitHash = lastHash,
+                lastCommitMessage = c?.get("message")?.s(),
+                lastCommittedAt = c?.get("committed_at")?.s(),
+                lastCommitter = committer
+            )
+        }
     }
+
 
     /**
      * 특정 커밋 해시와 경로에 대한 트리 아이템 조회

@@ -14,7 +14,7 @@ class PullRequestFileJdbcRepository(
     private val fileMapper = RowMapper<PullRequestFileItem> { rs: ResultSet, _ ->
         PullRequestFileItem(
             id = rs.getLong("id"),
-            filePath = rs.getString("path"),
+            path = rs.getString("path"),
             oldPath = rs.getString("old_path"),
             status = rs.getString("status_code"),
             additions = rs.getInt("additions"),

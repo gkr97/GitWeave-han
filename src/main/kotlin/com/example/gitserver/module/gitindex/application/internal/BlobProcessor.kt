@@ -3,11 +3,10 @@ package com.example.gitserver.module.gitindex.application.internal
 import com.example.gitserver.module.gitindex.domain.policy.BlobMetaAnalyzer
 import com.example.gitserver.module.gitindex.infrastructure.runtime.RetryPolicy.retry
 import com.example.gitserver.module.gitindex.domain.Blob
-import com.example.gitserver.module.gitindex.domain.BlobTree
 import com.example.gitserver.module.gitindex.domain.port.BlobObjectStorage
 import com.example.gitserver.module.gitindex.domain.port.IndexTxRepository
-import com.example.gitserver.module.gitindex.domain.port.TreeRepository
-import com.example.gitserver.module.gitindex.domain.vo.*
+import com.example.gitserver.module.gitindex.domain.vo.BlobHash
+import com.example.gitserver.module.gitindex.domain.vo.FilePath
 import mu.KotlinLogging
 import org.eclipse.jgit.lib.FileMode
 import org.eclipse.jgit.lib.ObjectId
@@ -16,13 +15,13 @@ import org.springframework.stereotype.Component
 import java.io.ByteArrayInputStream
 import java.time.Duration.ofMillis
 import java.time.Instant
+
 private val log = KotlinLogging.logger {}
 
 @Component
 class BlobProcessor(
     private val blobStorage: BlobObjectStorage,
     private val analyzer: BlobMetaAnalyzer,
-    private val treeRepo: TreeRepository,
     private val txRepo: IndexTxRepository,
 ) {
     companion object {
@@ -33,19 +32,7 @@ class BlobProcessor(
     }
 
     /**
-     * 파일(Blob) 객체를 처리합니다.
-     * - 크기가 SMALL_LIMIT 이하인 경우 메모리로 읽어와 BlobMetaAnalyzer로 분석 후 저장
-     * - 크기가 SMALL_LIMIT 초과인 경우 스트림으로 읽어와 BlobMetaAnalyzer로 샘플링 분석 후 저장
-     * - Blob 데이터를 외부 스토리지에 업로드
-     * - Blob 및 BlobTree 정보를 데이터베이스에 저장
-     *
-     * @param repositoryId 저장소 ID
-     * @param commitHash 커밋 해시
-     * @param path 파일 경로
-     * @param name 파일 이름
-     * @param objectId JGit ObjectId (Blob ID)
-     * @param repo JGit Repository 객체
-     * @param commitInstant 커밋 시각
+     * 블롭(파일) 업서트 처리
      */
     fun processFile(
         repositoryId: Long,
@@ -66,7 +53,7 @@ class BlobProcessor(
                 ByteArrayInputStream(bytes).use { blobStorage.putStream(hash, it, size) }
             }
             val (mime, bin, lines) = analyzer.analyzeSmall(bytes)
-            save(repositoryId, commitHash, path, name, hash, size, mime, bin, lines, commitInstant)
+            saveBlobOnly(repositoryId, commitHash, path, name, hash, size, mime, bin, lines, commitInstant)
             log.debug { "[BlobProcessor] small uploaded path=$path size=$size" }
         } else {
             retry(MAX_RETRIES, RETRY_BASE_DELAY) {
@@ -75,36 +62,49 @@ class BlobProcessor(
             val (mime, bin, _) = repo.open(objectId).openStream().use {
                 analyzer.analyzeLarge(it, size, SAMPLE_BYTES)
             }
-            save(repositoryId, commitHash, path, name, hash, size, mime, bin, null, commitInstant)
+            saveBlobOnly(repositoryId, commitHash, path, name, hash, size, mime, bin, null, commitInstant)
             log.debug { "[BlobProcessor] large uploaded path=$path size=$size" }
         }
     }
 
+    /**
+     * 심볼릭 링크는 TREE 기록을 하지 않으므로 no-op
+     */
     fun processSymlink(
         repositoryId: Long, commitHash: String, path: String, name: String,
         objectId: ObjectId, commitInstant: Instant
     ) {
-        val tree = treeVo(repositoryId, commitHash, path, name, objectId.name, false, 0L, commitInstant)
-        treeRepo.save(tree)
+        log.trace { "[BlobProcessor:NOOP] symlink $path (${objectId.name})" }
     }
 
+    /**
+     * 서브모듈(gitlink)도 TREE 기록을 하지 않으므로 no-op
+     */
     fun processGitlink(
         repositoryId: Long, commitHash: String, path: String, name: String,
         objectId: ObjectId, commitInstant: Instant
     ) {
-        val tree = treeVo(repositoryId, commitHash, path, name, objectId.name, false, 0L, commitInstant)
-        treeRepo.save(tree)
+        log.trace { "[BlobProcessor:NOOP] gitlink $path (${objectId.name})" }
     }
 
+    /**
+     * 디렉터리(TREE) 업서트는 중단. no-op
+     */
     fun processDirectory(
         repositoryId: Long, commitHash: String, path: String, name: String,
         objectId: ObjectId, commitInstant: Instant
     ) {
-        val tree = treeVo(repositoryId, commitHash, path, name, objectId.name, true, 0L, commitInstant)
-        treeRepo.save(tree)
+        log.trace { "[BlobProcessor:NOOP] dir $path (${objectId.name})" }
     }
 
-    private fun save(
+    /**
+     * 부모 디렉터리 보정도 중단. no-op
+     */
+    fun ensureParentDirs(repositoryId: Long, commitHash: String, fullPath: String, commitInstant: Instant) {
+        log.trace { "[BlobProcessor:NOOP] ensureParentDirs $fullPath" }
+    }
+
+    private fun saveBlobOnly(
         repositoryId: Long, commitHash: String, path: String, name: String,
         hash: String, size: Long, mime: String?, bin: Boolean, lines: Int?, commitInstant: Instant
     ) {
@@ -120,48 +120,7 @@ class BlobProcessor(
             externalStorageKey = "blobs/$hash",
             createdAt = commitInstant
         )
-        val tree = treeVo(repositoryId, commitHash, path, name, hash, false, size, commitInstant)
-        txRepo.saveBlobAndTree(blob, tree)
-    }
-
-
-    private fun treeVo(
-        repositoryId: Long, commitHash: String, path: String, name: String,
-        fileHash: String, isDir: Boolean, size: Long, commitInstant: Instant
-    ) = BlobTree(
-        repositoryId = repositoryId,
-        commitHash = CommitHash(commitHash),
-        path = FilePath(path),
-        name = name,
-        isDirectory = isDir,
-        fileHash = fileHash,
-        size = size,
-        depth = path.count { it == '/' },
-        fileTypeCodeId = null,
-        lastModifiedAt = commitInstant
-    )
-
-    fun ensureParentDirs(repositoryId: Long, commitHash: String, fullPath: String, commitInstant: Instant) {
-        val segments = fullPath.split('/').dropLast(1)
-        if (segments.isEmpty()) return
-        var acc = mutableListOf<String>()
-        for (seg in segments) {
-            acc += seg
-            val dirPath = acc.joinToString("/")
-            val tree = BlobTree(
-                repositoryId = repositoryId,
-                commitHash = CommitHash(commitHash),
-                path = FilePath(dirPath),
-                name = seg,
-                isDirectory = true,
-                fileHash = null,
-                size = 0L,
-                depth = dirPath.count { it == '/' },
-                fileTypeCodeId = null,
-                lastModifiedAt = commitInstant
-            )
-            treeRepo.save(tree)
-        }
+        txRepo.saveBlobOnly(blob)
     }
 
     fun isSymlink(mode: FileMode) = mode == FileMode.SYMLINK

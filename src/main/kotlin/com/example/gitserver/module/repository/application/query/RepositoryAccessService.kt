@@ -1,6 +1,7 @@
 package com.example.gitserver.module.repository.application.query
 
-import com.example.gitserver.module.common.service.CommonCodeCacheService
+import com.example.gitserver.module.common.application.service.CommonCodeCacheService
+import com.example.gitserver.module.common.cache.RequestCache
 import com.example.gitserver.module.repository.domain.Repository
 import com.example.gitserver.module.repository.exception.RepositoryAccessDeniedException
 import com.example.gitserver.module.repository.infrastructure.persistence.CollaboratorRepository
@@ -10,14 +11,11 @@ import org.springframework.stereotype.Service
 @Service
 class RepositoryAccessService(
     private val commonCodeCacheService: CommonCodeCacheService,
-    private val collaboratorRepository: CollaboratorRepository
+    private val collaboratorRepository: CollaboratorRepository,
+    private val requestCache: RequestCache
 ) {
     private val log = KotlinLogging.logger {}
 
-    /**
-     * 읽기 권한 체크(실패 시 예외)
-     * @param requireAccepted true: collaborator 가 초대 수락(accepted=true)이어야 접근 허용(기본)
-     */
     fun checkReadAccessOrThrow(repo: Repository, currentUserId: Long?, requireAccepted: Boolean = true) {
         log.debug { "[Access] read-check start repoId=${repo.id} userId=${currentUserId ?: "anon"}" }
 
@@ -26,31 +24,22 @@ class RepositoryAccessService(
             return
         }
 
-        val owner = isOwner(repo, currentUserId)
-        if (owner) {
+        if (isOwner(repo, currentUserId)) {
             log.debug { "[Access] owner -> allow repoId=${repo.id} userId=$currentUserId" }
             return
         }
 
-        val collaborator = isCollaborator(repo, currentUserId,  requireAccepted)
-        if (collaborator) {
-            log.debug {
-                "[Access] collaborator(requireAccepted=$requireAccepted) -> allow repoId=${repo.id} userId=$currentUserId"
-            }
+        if (isCollaborator(repo, currentUserId, requireAccepted)) {
+            log.debug { "[Access] collaborator(requireAccepted=$requireAccepted) -> allow repoId=${repo.id} userId=$currentUserId" }
             return
         }
 
         log.warn {
-            "[Access] forbidden repoId=${repo.id} userId=${currentUserId ?: "anon"} " +
-                    "public=false owner=false collaborator=false"
+            "[Access] forbidden repoId=${repo.id} userId=${currentUserId ?: "anon"} public=false owner=false collaborator=false"
         }
         throw RepositoryAccessDeniedException(repo.id, currentUserId)
     }
 
-    /**
-     * 읽기 권한 체크(성공 시 true, 실패 시 false)
-     * @param requireAccepted true: collaborator 가 초대 수락(accepted=true)이어야 접근 허용(기본)
-     */
     fun hasReadAccess(repo: Repository, currentUserId: Long?, requireAccepted: Boolean = true): Boolean {
         if (isPublicRepository(repo)) return true
         if (isOwner(repo, currentUserId)) return true
@@ -76,17 +65,23 @@ class RepositoryAccessService(
 
     private fun isCollaborator(repo: Repository, currentUserId: Long?, requireAccepted: Boolean): Boolean {
         if (currentUserId == null) {
-            log.debug { "[Access] isCollaborator=  false (user null)" }
+            log.debug { "[Access] isCollaborator=false (user null)" }
             return false
         }
-        val result = if (requireAccepted) {
+
+        requestCache.getCollabExists(repo.id!!, currentUserId)?.let { cached ->
+            log.debug { "[Access] isCollaborator (req-cache hit)=$cached repoId=${repo.id} userId=$currentUserId requireAccepted=$requireAccepted" }
+            return cached
+        }
+
+        val exists = if (requireAccepted) {
             collaboratorRepository.existsByRepositoryIdAndUserIdAndAcceptedTrue(repo.id, currentUserId)
         } else {
             collaboratorRepository.existsByRepositoryIdAndUserId(repo.id, currentUserId)
         }
-        log.debug {
-            "[Access] isCollaborator= $result repoId=${repo.id} userId=$currentUserId requireAccepted=$requireAccepted"
-        }
-        return result
+
+        requestCache.putCollabExists(repo.id, currentUserId, exists)
+        log.debug { "[Access] isCollaborator (db)=$exists repoId=${repo.id} userId=$currentUserId requireAccepted=$requireAccepted" }
+        return exists
     }
 }

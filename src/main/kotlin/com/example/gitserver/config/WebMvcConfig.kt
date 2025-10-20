@@ -6,6 +6,9 @@ import org.springframework.web.servlet.config.annotation.CorsRegistry
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer
 
+/**
+ * Web MVC 설정
+ */
 @Configuration
 class WebMvcConfig(
 ) : WebMvcConfigurer{

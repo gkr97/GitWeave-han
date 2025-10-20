@@ -45,14 +45,21 @@ class JwtProvider(
      */
     fun validateToken(token: String): Boolean {
         return try {
-            val claims = getClaims(token)
+            val claims = Jwts.parserBuilder()
+                .setSigningKey(key)
+                .build()
+                .parseClaimsJws(token)
+                .body
             !claims.expiration.before(Date())
-        } catch (e: JwtException) {
+        } catch (_: ExpiredJwtException) {
             false
-        } catch (e: IllegalArgumentException) {
+        } catch (_: JwtException) {
+            false
+        } catch (_: IllegalArgumentException) {
             false
         }
     }
+
 
     /**
      * JWT 토큰에서 사용자 ID를 추출합니다.

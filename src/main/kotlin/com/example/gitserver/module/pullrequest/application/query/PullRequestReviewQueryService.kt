@@ -1,6 +1,6 @@
 package com.example.gitserver.module.pullrequest.application.query
 
-import com.example.gitserver.module.common.service.CommonCodeCacheService
+import com.example.gitserver.module.common.application.service.CommonCodeCacheService
 import com.example.gitserver.module.pullrequest.application.query.model.PullRequestReviewSummaryView
 import com.example.gitserver.module.pullrequest.application.query.model.PullRequestReviewerView
 import com.example.gitserver.module.pullrequest.infrastructure.persistence.PullRequestReviewerRepository

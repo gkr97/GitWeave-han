@@ -27,13 +27,15 @@ class UserProfileCommandService(
         val user = userRepository.findByIdAndIsDeletedFalse(userId)
             ?: throw UserNotFoundException(userId)
 
-        val imageUrl = s3Uploader.upload(imageFile, "user-profile-pictures/$userId")
+
+        val key = "user-profile-pictures/$userId.png"
+        val imageUrl = s3Uploader.upload(imageFile, key)
 
         user.updateProfileImage(imageUrl)
         return imageUrl
-    }
 
-    /**
+    }
+        /**
      * 사용자 이름 업데이트
      * @param userId 사용자 ID
      * @param name 새 사용자 이름

@@ -9,5 +9,4 @@ data class TreeNodeResponse(
     val lastCommitMessage: String? = null,
     val lastCommittedAt: String? = null,
     val lastCommitter: RepositoryUserResponse? = null,
-
 )

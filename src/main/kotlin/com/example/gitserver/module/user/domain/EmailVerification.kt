@@ -33,6 +33,7 @@ data class EmailVerification(
     }
     fun isExpired(now: LocalDateTime = LocalDateTime.now()): Boolean =
         expiresAt.isBefore(now)
+
     fun canBeUsed(now: LocalDateTime = LocalDateTime.now()): Boolean =
         !isUsed && !isExpired(now)
 }

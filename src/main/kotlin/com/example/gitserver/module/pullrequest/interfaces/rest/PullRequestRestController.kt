@@ -3,7 +3,7 @@ package com.example.gitserver.module.pullrequest.interfaces.rest
 import com.example.gitserver.common.response.ApiResponse
 import com.example.gitserver.module.pullrequest.application.command.CreatePullRequestCommand
 import com.example.gitserver.module.pullrequest.application.command.UpdatePullRequestCommand
-import com.example.gitserver.module.pullrequest.application.command.handler.PullRequestCommandHandler
+import com.example.gitserver.module.pullrequest.application.command.handler.CreatePullRequestHandler
 import com.example.gitserver.module.pullrequest.application.command.handler.UpdatePullRequestCommandHandler
 import com.example.gitserver.module.pullrequest.interfaces.dto.CreatePullRequestRequest
 import com.example.gitserver.module.pullrequest.interfaces.dto.UpdatePullRequestRequest
@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.*
 @RestController
 @RequestMapping("/api/v1/repositories/{repoId}/pull-requests")
 class PullRequestRestController(
-    private val pullRequestCommandHandler: PullRequestCommandHandler,
+    private val pullRequestCommandHandler: CreatePullRequestHandler,
     private val updatePullRequestCommandHandler: UpdatePullRequestCommandHandler,
     private val userRepository: UserRepository,
 ) {

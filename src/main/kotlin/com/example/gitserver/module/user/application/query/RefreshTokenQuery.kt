@@ -4,4 +4,5 @@ import com.example.gitserver.module.user.domain.vo.RefreshToken
 
 interface RefreshTokenQuery {
     fun findByUserId(userId: Long): RefreshToken?
+    fun findByValue(value: String): RefreshToken?
 }

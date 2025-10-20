@@ -19,6 +19,29 @@
         </encoder>
     </appender>
 
+    <!-- DataLoader 배치/디스패치 -->
+    <logger name="org.dataloader" level="DEBUG"/>
+
+    <!-- Spring GraphQL 실행 흐름(핸들러/리졸버 단계) -->
+    <logger name="org.springframework.graphql" level="DEBUG"/>
+
+    <!-- Spring Cache: 히트/미스/적재/에빅트 -->
+    <logger name="org.springframework.cache" level="TRACE"/>
+    <logger name="org.springframework.cache.interceptor" level="TRACE"/>
+
+    <!-- Caffeine 사용 시 내부 캐시 이벤트 -->
+    <logger name="com.github.benmanes.caffeine.cache" level="DEBUG"/>
+
+    <!-- 트랜잭션  -->
+    <logger name="org.springframework.transaction" level="DEBUG"/>
+    <logger name="org.springframework.data.redis.core" level="TRACE"/>
+    <logger name="io.lettuce.core" level="DEBUG"/>
+    <logger name="io.lettuce.core.protocol" level="DEBUG"/>
+
+    <logger name="org.hibernate.SQL" level="DEBUG"/>
+    <logger name="org.hibernate.type.descriptor.sql" level="TRACE"/>
+
+
     <logger name="org.springframework" level="INFO"/>
     <logger name="org.hibernate" level="WARN"/>
 
@@ -26,4 +49,4 @@
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="FILE"/>
     </root>
-</configuration> 
+</configuration>

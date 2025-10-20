@@ -13,6 +13,9 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner
 import software.amazon.awssdk.services.sqs.SqsClient
 import java.net.URI
 
+/**
+ * AWS 클라이언트 설정
+ */
 @Configuration
 class AwsConfig(
     @Value("\${cloud.aws.s3.endpoint}") private val s3Endpoint: String,

@@ -1,14 +1,17 @@
 package com.example.gitserver.module.user.application.command.handler
 
-import com.example.gitserver.module.common.service.CommonCodeCacheService
+import com.example.gitserver.module.common.application.service.CommonCodeCacheService
 import com.example.gitserver.module.user.application.command.RegisterUserCommand
+import com.example.gitserver.module.user.application.service.IdenticonGenerator
 import com.example.gitserver.module.user.domain.User
 import com.example.gitserver.module.user.exception.RegisterUserException
 import com.example.gitserver.module.user.infrastructure.persistence.UserRepository
+import com.example.gitserver.module.user.infrastructure.s3.S3Uploader
 import mu.KotlinLogging
 import org.springframework.context.support.MessageSourceAccessor
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
+import java.time.Duration
 
 @Service
 class RegisterUserCommandHandler(
@@ -16,6 +19,8 @@ class RegisterUserCommandHandler(
     private val passwordEncoder: PasswordEncoder,
     private val messageSourceAccessor: MessageSourceAccessor,
     private val codeCacheService: CommonCodeCacheService,
+    private val identiconGenerator: IdenticonGenerator,
+    private val s3Uploader: S3Uploader
 ) {
     private val log = KotlinLogging.logger {}
 
@@ -34,19 +39,22 @@ class RegisterUserCommandHandler(
             )
         }
 
-        val user = User(
+        val providerCodeId = codeCacheService.getCodeDetailsOrLoad("PROVIDER")
+            .firstOrNull { it.code == "local" }?.id ?: 1L
+
+
+        val toSave = User(
             email = command.email,
             passwordHash = passwordEncoder.encode(command.password),
             name = command.name,
             isActive = true,
             isDeleted = false,
-            providerCodeId = codeCacheService.getCodeDetailsOrLoad("PROVIDER")
-                .firstOrNull { it.code == "local" }?.id ?: 1L,
+            providerCodeId = providerCodeId,
             timezone = "Asia/Seoul",
         )
 
-        try {
-            userRepository.save(user)
+        val saved = try {
+            userRepository.save(toSave)
         } catch (e: Exception) {
             log.error(e) { "회원가입 실패 - 사용자 저장 중 오류: ${command.email}" }
             throw RegisterUserException(
@@ -55,7 +63,27 @@ class RegisterUserCommandHandler(
             )
         }
 
-        log.info { "회원가입 성공: ${user.email}" }
-        return user
+        try {
+            val png = identiconGenerator.generate(
+                seed = command.email,
+                size = 256
+            )
+            val key = "user-profile-pictures/${saved.id}.png"
+
+            val presignedUrl = s3Uploader.uploadBytesAndGetPresignedGetUrl(
+                key = key,
+                bytes = png,
+                contentType = "image/png",
+                expiry = Duration.ofDays(7)
+            )
+
+            saved.updateProfileImage(presignedUrl)
+            userRepository.save(saved)
+        } catch (e: Exception) {
+            log.warn(e) { "identicon 생성/업로드 실패: userId=${saved.id}" }
+        }
+
+        log.info { "회원가입 성공: ${saved.email}, avatar=${saved.profileImageUrl}" }
+        return saved
     }
 }

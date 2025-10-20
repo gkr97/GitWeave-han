@@ -10,7 +10,7 @@ data class RepoDetailResponse (
     val createdAt: LocalDateTime,
     val lastUpdatedAt: LocalDateTime?,
     val owner: RepositoryUserResponse,
-    val isBookmarked: Boolean,
+    val isStarred: Boolean,
     val isOwner: Boolean,
     val isInvited: Boolean,
     val contributors: List<RepositoryUserResponse>,

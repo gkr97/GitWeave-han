@@ -74,3 +74,5 @@ out/
 .vscode/
 
 node_modules/
+.fleet/
+.voyager-server/

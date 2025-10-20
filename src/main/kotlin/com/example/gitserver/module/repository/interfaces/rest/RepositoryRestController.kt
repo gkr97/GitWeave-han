@@ -1,6 +1,8 @@
 package com.example.gitserver.module.repository.interfaces.rest
 
 import com.example.gitserver.common.response.ApiResponse
+import com.example.gitserver.module.repository.application.command.AddRepositoryStarCommand
+import com.example.gitserver.module.repository.application.command.RemoveRepositoryStarCommand
 import com.example.gitserver.module.repository.application.command.ChangeRepositoryVisibilityCommand
 import com.example.gitserver.module.repository.application.command.CreateRepositoryCommand
 import com.example.gitserver.module.repository.application.command.DeleteRepositoryCommand
@@ -9,7 +11,9 @@ import com.example.gitserver.module.repository.application.command.handler.Chang
 import com.example.gitserver.module.repository.application.command.handler.CreateRepositoryCommandHandler
 import com.example.gitserver.module.repository.application.command.handler.DeleteRepositoryCommandHandler
 import com.example.gitserver.module.repository.application.command.handler.UpdateRepositoryCommandHandler
+import com.example.gitserver.module.repository.application.command.handler.RepositoryStarCommandHandler
 import com.example.gitserver.module.repository.application.query.RepositoryDownloadQueryService
+import com.example.gitserver.module.repository.application.query.RepositoryStarQueryService
 import com.example.gitserver.module.repository.interfaces.dto.ChangeVisibilityRequest
 import com.example.gitserver.module.repository.interfaces.dto.CreateRepositoryRequest
 import com.example.gitserver.module.repository.interfaces.dto.RepositoryResponse
@@ -21,9 +25,7 @@ import io.swagger.v3.oas.annotations.Operation
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
-import org.springframework.security.concurrent.DelegatingSecurityContextRunnable
 import org.springframework.security.core.annotation.AuthenticationPrincipal
-import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.web.bind.annotation.*
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody
 
@@ -36,6 +38,8 @@ class RepositoryRestController(
     private val changeRepoVisibilityCommandHandler: ChangeRepoVisibilityCommandHandler,
     private val userRepository: UserRepository,
     private val repositoryDownloadQueryService: RepositoryDownloadQueryService,
+    private val repositoryStarCommandHandler: RepositoryStarCommandHandler,
+    private val repositoryStarQueryService: RepositoryStarQueryService,
 ) {
 
     private val logger = mu.KotlinLogging.logger {}
@@ -151,6 +155,57 @@ class RepositoryRestController(
         )
     }
 
+    @Operation(summary = "Add star to repository (idempotent)")
+    @PostMapping("/{repoId}/star")
+    fun addStar(
+        @PathVariable repoId: Long,
+        @AuthenticationPrincipal userDetails: CustomUserDetails
+    ): ResponseEntity<ApiResponse<String>> {
+        val cmd = AddRepositoryStarCommand(
+            repositoryId = repoId,
+            requesterId = userDetails.getUserId()
+        )
+        repositoryStarCommandHandler.handle(cmd)
+        return ResponseEntity.ok(ApiResponse.success(HttpStatus.OK.value(), "Star가 추가되었습니다."))
+    }
 
+    @Operation(summary = "Remove star from repository (idempotent)")
+    @DeleteMapping("/{repoId}/star")
+    fun removeStar(
+        @PathVariable repoId: Long,
+        @AuthenticationPrincipal userDetails: CustomUserDetails
+    ): ResponseEntity<ApiResponse<String>> {
+        val cmd = RemoveRepositoryStarCommand(
+            repositoryId = repoId,
+            requesterId = userDetails.getUserId()
+        )
+        repositoryStarCommandHandler.handle(cmd)
+        return ResponseEntity.ok(ApiResponse.success(HttpStatus.OK.value(), "Star가 제거되었습니다."))
+    }
 
+    @Operation(summary = "Check whether current user starred the repository")
+    @GetMapping("/{repoId}/star")
+    fun hasStar(
+        @PathVariable repoId: Long,
+        @AuthenticationPrincipal userDetails: CustomUserDetails?
+    ): ResponseEntity<ApiResponse<Boolean>> {
+        val userId = userDetails?.getUserId() ?: return ResponseEntity.ok(ApiResponse.success(HttpStatus.OK.value(), null, false))
+        val has = repositoryStarQueryService.hasStar(userId, repoId)
+        return ResponseEntity.ok(ApiResponse.success(HttpStatus.OK.value(), null, has))
+    }
+
+    @Operation(summary = "Get star count for repository")
+    @GetMapping("/{repoId}/stars/count")
+    fun countStars(@PathVariable repoId: Long): ResponseEntity<ApiResponse<Int>> {
+        val cnt = repositoryStarQueryService.countStars(repoId)
+        return ResponseEntity.ok(ApiResponse.success(HttpStatus.OK.value(), null, cnt))
+    }
+
+    @Operation(summary = "List stargazers (optional, pageable not shown)")
+    @GetMapping("/{repoId}/stargazers")
+    fun listStargazers(@PathVariable repoId: Long): ResponseEntity<ApiResponse<List<Long>>> {
+        val users = repositoryStarQueryService.listStargazers(repoId)
+        val ids = users.map { it.id }
+        return ResponseEntity.ok(ApiResponse.success(HttpStatus.OK.value(), null, ids))
+    }
 }

@@ -96,7 +96,7 @@ class PullRequestFileJdbcIndexRepository(
         jdbc.query(selectItemsSql, mapOf("prId" to prId)) { rs, _ ->
             PullRequestFileItem(
                 id = 0L,
-                filePath = rs.getString("path"),
+                path = rs.getString("path"),
                 oldPath = rs.getString("old_path"),
                 status = rs.getString("status"),
                 additions = rs.getInt("additions"),

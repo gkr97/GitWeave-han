@@ -8,7 +8,7 @@ data class RepositoryListItem(
     val lastUpdatedAt: String,
     val isOwner: Boolean,
     val language: String?,
-    val isBookmarked: Boolean,
+    val isStarred: Boolean,
     val isInvited: Boolean,
     val ownerInfo: RepositoryUserResponse?
 )

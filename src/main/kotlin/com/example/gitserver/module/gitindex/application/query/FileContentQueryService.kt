@@ -1,11 +1,23 @@
 package com.example.gitserver.module.gitindex.application.query
 
 import com.example.gitserver.module.gitindex.domain.port.BlobObjectStorage
-import com.example.gitserver.module.gitindex.infrastructure.redis.GitIndexCache
+import com.example.gitserver.module.gitindex.infrastructure.git.GitPathResolver
+import com.example.gitserver.module.repository.exception.RepositoryNotFoundException
+import com.example.gitserver.module.repository.infrastructure.persistence.RepositoryRepository
 import com.example.gitserver.module.repository.interfaces.dto.FileContentResponse
 import com.example.gitserver.module.repository.interfaces.dto.RepositoryUserResponse
 import mu.KotlinLogging
+import org.eclipse.jgit.lib.ObjectId
+import org.eclipse.jgit.lib.Repository
+import org.eclipse.jgit.revwalk.RevTree
+import org.eclipse.jgit.revwalk.RevWalk
+import org.eclipse.jgit.storage.file.FileRepositoryBuilder
+import org.eclipse.jgit.treewalk.TreeWalk
 import org.springframework.stereotype.Service
+import java.io.File
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
+import java.time.Duration.ofMinutes
 import java.time.ZoneId
 import kotlin.system.measureTimeMillis
 
@@ -13,121 +25,138 @@ private val log = KotlinLogging.logger {}
 
 @Service
 class FileContentQueryService(
-    private val cache: GitIndexCache,
+    private val repositoryRepository: RepositoryRepository,
+    private val gitPathResolver: GitPathResolver,
     private val blobStorage: BlobObjectStorage,
 ) {
-    private val maxTextBytes: Long = 1_048_576
 
-    /**
-     * 파일 내용 조회
-     *
-     * @param repositoryId 레포지토리 ID
-     * @param commitHash 커밋 해시 (필수)
-     * @param path 파일 경로 (상대 경로, 슬래시로 시작하지 않음)
-     * @param branch 브랜치 이름 (선택적, null이면 HEAD)
-     */
+    companion object {
+        const val MAX_TEXT_FILE_SIZE = 1_048_576L // 1MB
+    }
+
     fun getFileContent(
         repositoryId: Long,
         commitHash: String?,
         path: String,
         branch: String?
     ): FileContentResponse {
-        val hash = requireNotNull(commitHash) { "commitHash는 필수입니다." }
-        val normPath = path.trim().trim('/')
+        require(!commitHash.isNullOrBlank()) { "commitHash는 필수입니다." }
+        val hash = commitHash!!
 
-        log.info { "[FileContent] 요청 수신 repoId=$repositoryId, commit=$hash, path=$normPath, branch=$branch" }
+        val decodedPath = URLDecoder.decode(path, StandardCharsets.UTF_8)
+        val normPath = normalizePath(decodedPath)
 
-        val elapsedMetaMs = measureTimeMillis {
-            // 1) 메타 조회
-            val commit = cache.getCommitByHash(repositoryId, hash)
-                ?: run {
-                    log.warn { "[FileContent] 커밋 메타 없음 repoId=$repositoryId, commit=$hash" }
-                    throw IllegalStateException("커밋 메타 없음: $hash")
-                }
+        log.info { "[FileContent] repo=$repositoryId commit=$hash path(raw)=$path path(decoded)=$decodedPath path(norm)=$normPath branch=$branch" }
 
-            val treeItem = cache.getTreeItem(repositoryId, hash, normPath)
-                ?: run {
-                    log.warn { "[FileContent] 파일 트리 메타 없음 repoId=$repositoryId, commit=$hash, path=$normPath" }
-                    throw NoSuchElementException("파일 트리 메타 없음: $normPath")
-                }
+        val repoEntity = repositoryRepository.findByIdWithOwner(repositoryId)
+            ?: throw RepositoryNotFoundException(repositoryId)
 
-            val fileHash = treeItem.fileHash
-                ?: run {
-                    log.error { "[FileContent] file_hash 없음 repoId=$repositoryId, commit=$hash, path=$normPath" }
-                    throw IllegalStateException("file_hash 없음: $normPath")
-                }
+        val bareDir = gitPathResolver.bareDir(repoEntity.owner.id, repoEntity.name)
+        var result: FileContentResponse? = null
 
-            val blobMeta = cache.getBlobMeta(repositoryId, fileHash)
-                ?: run {
-                    log.warn { "[FileContent] Blob 메타 없음 repoId=$repositoryId, fileHash=$fileHash, path=$normPath" }
-                    throw NoSuchElementException("Blob 메타 없음: $fileHash")
-                }
+        val took = measureTimeMillis {
+            FileRepositoryBuilder()
+                .setGitDir(File(bareDir))
+                .setMustExist(true)
+                .build()
+                .use { repo ->
+                    val (commit, tree) =
+                        RevWalk(repo).use { rw ->
+                            val oid = ObjectId.fromString(hash)
+                            val c = rw.parseCommit(oid)
+                            c to rw.parseTree(c.tree.id)
+                        }
 
-            // 2) 텍스트/바이너리 판정 및 키 정규화
-            val isLargeText = (blobMeta.size ?: 0) > maxTextBytes
-            val isBinary = blobMeta.isBinary || isLargeText
-            val objectKey = if (blobMeta.externalStorageKey.startsWith("blobs/"))
-                blobMeta.externalStorageKey else "blobs/${blobMeta.externalStorageKey}"
+                    val blobOid = findBlob(repo, tree, normPath)
+                        ?: throw NoSuchElementException("파일을 찾을 수 없습니다: $normPath")
 
-            log.info {
-                "[FileContent] 메타 ok repoId=$repositoryId, path=$normPath, size=${blobMeta.size}, " +
-                        "mime=${blobMeta.mimeType}, isBinary=${blobMeta.isBinary}, largeText=$isLargeText, key=$objectKey"
-            }
+                    val loader = repo.open(blobOid)
+                    val size = loader.size
 
-            // 3) presign or 본문 로드 (view raw content)
-            val (downloadUrl, expiresAt) =
-                if (isBinary) blobStorage.presignForDownload(objectKey, normPath, blobMeta.mimeType)
-                else null to null
+                    val smallBytes: ByteArray? = if (size <= MAX_TEXT_FILE_SIZE) {
+                        loader.getCachedBytes(Int.MAX_VALUE)
+                    } else null
 
-            val content: String? =
-                if (!isBinary) {
-                    val t = measureTimeMillis {
-                        blobStorage.readAsString(objectKey)
+                    val isBinary = when {
+                        size > MAX_TEXT_FILE_SIZE -> true
+                        smallBytes == null        -> true
+                        else                      -> isBinaryProbe(smallBytes)
                     }
-                    log.info { "[FileContent] 텍스트 본문 로드 완료 path=$normPath, elapsed=${t}ms" }
-                    blobStorage.readAsString(objectKey)
-                } else {
-                    log.info { "[FileContent] 바이너리/대용량 처리 path=$normPath, presignedOnly=true" }
-                    null
+
+                    val mimeType = sniffMime(normPath, isBinary)
+
+                    val (content, downloadUrl, expiresAt) =
+                        if (!isBinary && smallBytes != null) {
+                            Triple(String(smallBytes, StandardCharsets.UTF_8), null, null)
+                        } else {
+                            val key = "blobs/${blobOid.name()}"
+                            val (url, exp) = blobStorage.presignForDownload(
+                                key, normPath, mimeType, ofMinutes(10)
+                            )
+                            Triple(null, url, exp)
+                        }
+
+                    val committedAtStr = commit.committerIdent.whenAsInstant
+                        .atZone(ZoneId.systemDefault()).toInstant().toString()
+
+                    val committer = RepositoryUserResponse(
+                        userId = -1L,
+                        nickname = commit.committerIdent.name ?: "unknown",
+                        profileImageUrl = null
+                    )
+
+                    result = FileContentResponse(
+                        path = normPath,
+                        content = content,
+                        isBinary = isBinary,
+                        mimeType = mimeType,
+                        size = size,
+                        commitHash = hash,
+                        commitMessage = commit.fullMessage,
+                        committedAt = committedAtStr,
+                        committer = committer,
+                        downloadUrl = downloadUrl,
+                        expiresAt = expiresAt
+                    )
                 }
-
-            val committer: RepositoryUserResponse = commit.author.let {
-                RepositoryUserResponse(
-                    userId = it.userId,
-                    nickname = it.nickname,
-                    profileImageUrl = it.profileImageUrl
-                )
-            }
-
-            val committedAtStr = try {
-                commit.committedAt.atZone(ZoneId.systemDefault()).toInstant().toString()
-            } catch (e: Exception) {
-                log.warn(e) { "[FileContent] committedAt 변환 실패 commit=$hash, path=$normPath" }
-                null
-            }
-
-            _lastResponse = FileContentResponse(
-                path = normPath,
-                content = content,
-                isBinary = isBinary,
-                mimeType = blobMeta.mimeType,
-                size = blobMeta.size,
-                commitHash = hash,
-                commitMessage = commit.message,
-                committedAt = committedAtStr,
-                committer = committer,
-                downloadUrl = downloadUrl,
-                expiresAt = expiresAt
-            )
-
-            if (downloadUrl != null) {
-                log.info { "[FileContent] presigned 준비 완료 path=$normPath, key=$objectKey, expiresAt=$expiresAt" }
-            }
         }
-        log.info { "[FileContent] 처리 완료 path=$normPath, elapsed=${elapsedMetaMs}ms" }
+        log.info { "[FileContent] done path=$normPath elapsed=${took}ms" }
 
-        return _lastResponse!!.also { _lastResponse = null }
+        return requireNotNull(result)
     }
 
-    @Volatile private var _lastResponse: FileContentResponse? = null
+    private fun findBlob(repo: Repository, tree: RevTree, path: String): ObjectId? {
+        TreeWalk(repo).use { tw ->
+            tw.addTree(tree)
+            tw.isRecursive = true
+            while (tw.next()) {
+                if (!tw.isSubtree && tw.pathString == path) return tw.getObjectId(0)
+            }
+        }
+        return null
+    }
+
+    private fun isBinaryProbe(bytes: ByteArray): Boolean {
+        val probeLen = minOf(8000, bytes.size)
+        for (i in 0 until probeLen) if (bytes[i] == 0.toByte()) return true
+        return false
+    }
+
+    private fun sniffMime(path: String, bin: Boolean): String? {
+        if (!bin) return "text/plain"
+        return when (path.substringAfterLast('.', "").lowercase()) {
+            "png" -> "image/png"
+            "jpg", "jpeg" -> "image/jpeg"
+            "gif" -> "image/gif"
+            "pdf" -> "application/pdf"
+            else -> "application/octet-stream"
+        }
+    }
+
+    private fun normalizePath(input: String): String {
+        val trimmed = input.trim().trim('/')
+        require(!trimmed.contains('\u0000')) { "잘못된 경로입니다." }
+        require(!trimmed.contains("..")) { "상위 경로 접근은 허용되지 않습니다." }
+        return trimmed.replace('\\', '/')
+    }
 }

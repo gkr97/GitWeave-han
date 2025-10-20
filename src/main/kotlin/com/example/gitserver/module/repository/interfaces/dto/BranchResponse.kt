@@ -9,5 +9,6 @@ data class BranchResponse(
     val isProtected: Boolean,
     val createdAt: LocalDateTime,
     val headCommit: CommitResponse,
-    val creator: RepositoryUserResponse?
+    val creator: RepositoryUserResponse?,
+    val _repositoryId: Long
 )

@@ -16,4 +16,6 @@ interface IndexTxRepository {
         commitHash: CommitHash,
         expectedOld: CommitHash? = null
     ): Boolean
+
+    fun saveBlobOnly(blob: Blob)
 }
