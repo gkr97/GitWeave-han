@@ -37,6 +37,8 @@ dependencies {
     implementation("com.graphql-java:graphql-java-extended-scalars:20.1")
     implementation("org.springframework.boot:spring-boot-starter-cache")
     implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
+    implementation("org.springframework.boot:spring-boot-starter-aop")
+    implementation("org.springframework.retry:spring-retry")
 
     // Kotlin
     implementation("org.jetbrains.kotlin:kotlin-reflect")
@@ -67,6 +69,9 @@ dependencies {
     implementation("software.amazon.awssdk:sns:2.25.67")
     implementation("software.amazon.awssdk:dynamodb:2.25.67")
     implementation("software.amazon.awssdk:auth")
+    implementation("org.opensearch.client:opensearch-java:2.9.0")
+    implementation("org.opensearch.client:opensearch-rest-client:2.9.0")
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.15.2")
 
     // Git
     implementation("org.eclipse.jgit:org.eclipse.jgit:7.3.0.202506031305-r")
