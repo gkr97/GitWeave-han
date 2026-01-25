@@ -140,7 +140,7 @@ class UserAuthController(
             ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(ApiResponse.error(401, "Refresh token is missing"))
 
-        val (newAccessToken, newRefreshToken) = authQueryService.refreshByRefreshToken(refresh)
+        val (newAccessToken, newRefreshToken) = authCommandService.refreshByRefreshToken(refresh)
 
         val sameSite = CookieSupport.SameSite.Lax
         val secure = true

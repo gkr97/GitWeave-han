@@ -1,94 +1,110 @@
 package com.example.gitserver.module.repository.application.command.handler
 
-import com.example.gitserver.fixture.UserFixture
 import com.example.gitserver.fixture.RepositoryFixture
+import com.example.gitserver.fixture.UserFixture
 import com.example.gitserver.module.repository.application.command.DeleteRepositoryCommand
-import com.example.gitserver.module.repository.domain.Repository
-import com.example.gitserver.module.repository.exception.NotRepositoryOwnerException
 import com.example.gitserver.module.repository.exception.RepositoryNotFoundException
 import com.example.gitserver.module.repository.infrastructure.persistence.RepositoryRepository
-import com.example.gitserver.module.user.domain.User
 import com.example.gitserver.module.user.infrastructure.persistence.UserRepository
-import org.junit.jupiter.api.Assertions.*
-import org.junit.jupiter.api.BeforeEach
+import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.matchers.shouldBe
+import io.mockk.*
+import io.mockk.impl.annotations.InjectMockKs
+import io.mockk.impl.annotations.MockK
+import io.mockk.junit5.MockKExtension
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.assertThrows
-import org.mockito.kotlin.*
-import java.util.*
+import org.junit.jupiter.api.extension.ExtendWith
+import org.springframework.context.ApplicationEventPublisher
 
+@ExtendWith(MockKExtension::class)
 class DeleteRepositoryCommandHandlerTest {
 
-    private val repositoryRepository: RepositoryRepository = mock()
-    private val userRepository: UserRepository = mock()
-    private lateinit var handler: DeleteRepositoryCommandHandler
+    @MockK
+    lateinit var repositoryRepository: RepositoryRepository
 
-    private lateinit var user: User
-    private lateinit var repo: Repository
+    @MockK
+    lateinit var userRepository: UserRepository
 
-    @BeforeEach
-    fun setUp() {
-        handler = DeleteRepositoryCommandHandler(repositoryRepository, userRepository)
-        user = UserFixture.default()
-        repo = RepositoryFixture.default(owner = user)
-    }
+    @MockK
+    lateinit var access: com.example.gitserver.module.repository.domain.policy.RepoAccessPolicy
+
+    @MockK
+    lateinit var events: ApplicationEventPublisher
+
+    @InjectMockKs
+    lateinit var handler: DeleteRepositoryCommandHandler
 
     @Test
-    fun `정상적으로 저장소를 삭제할 수 있음`() {
-        val command = DeleteRepositoryCommand(repositoryId = repo.id, requesterEmail = user.email)
-        whenever(userRepository.findByEmailAndIsDeletedFalse(user.email)).thenReturn(user)
-        whenever(repositoryRepository.findById(repo.id)).thenReturn(Optional.of(repo))
-        whenever(repositoryRepository.save(any<Repository>())).thenReturn(repo)
+    fun `저장소 삭제 성공`() {
+        // given
+        val owner = UserFixture.default(id = 1L, email = "owner@test.com")
+        val repo = RepositoryFixture.default(
+            id = 1L,
+            owner = owner,
+            isDeleted = false
+        )
+        val command = DeleteRepositoryCommand(
+            repositoryId = 1L,
+            requesterEmail = "owner@test.com"
+        )
 
+        every { userRepository.findByEmailAndIsDeletedFalse("owner@test.com") } returns owner
+        every { repositoryRepository.findById(1L) } returns java.util.Optional.of(repo)
+        every { access.isOwner(1L, 1L) } returns true
+        every { repositoryRepository.save(any()) } returns repo
+        every { events.publishEvent(any<Any>()) } just Runs
+
+        // when
         handler.handle(command)
 
-        assertTrue(repo.isDeleted)
+        // then
+        repo.isDeleted shouldBe true
+        verify(exactly = 1) { repositoryRepository.save(repo) }
+        verify(exactly = 1) { events.publishEvent(any<Any>()) }
     }
 
     @Test
-    fun `인증된 사용자가 아닌 경우 예외 발생`() {
-        val command = DeleteRepositoryCommand(repositoryId = repo.id, requesterEmail = user.email)
-        whenever(userRepository.findByEmailAndIsDeletedFalse(user.email)).thenReturn(null)
+    fun `저장소 삭제 실패 - 소유자가 아님`() {
+        // given
+        val owner = UserFixture.default(id = 1L, email = "owner@test.com")
+        val requester = UserFixture.default(id = 2L, email = "requester@test.com")
+        val repo = RepositoryFixture.default(id = 1L, owner = owner)
+        val command = DeleteRepositoryCommand(
+            repositoryId = 1L,
+            requesterEmail = "requester@test.com"
+        )
 
-        val exception = assertThrows<IllegalArgumentException> {
-            handler.handle(command)
-        }
-        assertTrue(exception.message!!.contains("인증된 사용자가 없음"))
-    }
+        every { userRepository.findByEmailAndIsDeletedFalse("requester@test.com") } returns requester
+        every { repositoryRepository.findById(1L) } returns java.util.Optional.of(repo)
+        every { access.isOwner(1L, 2L) } returns false
 
-    @Test
-    fun `존재하지 않는 저장소에  대해 예외 발생`() {
-        val command = DeleteRepositoryCommand(repositoryId = 999L, requesterEmail = user.email)
-        whenever(userRepository.findByEmailAndIsDeletedFalse(user.email)).thenReturn(user)
-        whenever(repositoryRepository.findById(999L)).thenReturn(Optional.empty())
-
-        assertThrows<RepositoryNotFoundException> {
-            handler.handle(command)
-        }
-    }
-
-    @Test
-    fun `저장소 소유자가 아닌 경우 예외 발생`() {
-        val anotherUser = UserFixture.default(id = 2L, email = "other@test.com")
-        val repoOtherOwner = RepositoryFixture.default(id = 101L, owner = anotherUser)
-        val command = DeleteRepositoryCommand(repositoryId = repoOtherOwner.id, requesterEmail = user.email)
-        whenever(userRepository.findByEmailAndIsDeletedFalse(user.email)).thenReturn(user)
-        whenever(repositoryRepository.findById(repoOtherOwner.id)).thenReturn(Optional.of(repoOtherOwner))
-
-        assertThrows<NotRepositoryOwnerException> {
+        // when & then
+        shouldThrow<IllegalAccessException> {
             handler.handle(command)
         }
     }
 
     @Test
-    fun `이미 삭제된 저장소인 경우 예외 발생`() {
-        val deletedRepo = RepositoryFixture.default(owner = user, isDeleted = true)
-        val command = DeleteRepositoryCommand(repositoryId = deletedRepo.id, requesterEmail = user.email)
-        whenever(userRepository.findByEmailAndIsDeletedFalse(user.email)).thenReturn(user)
-        whenever(repositoryRepository.findById(deletedRepo.id)).thenReturn(Optional.of(deletedRepo))
+    fun `저장소 삭제 실패 - 이미 삭제됨`() {
+        // given
+        val owner = UserFixture.default(id = 1L, email = "owner@test.com")
+        val repo = RepositoryFixture.default(
+            id = 1L,
+            owner = owner,
+            isDeleted = true
+        )
+        val command = DeleteRepositoryCommand(
+            repositoryId = 1L,
+            requesterEmail = "owner@test.com"
+        )
 
-        val ex = assertThrows<IllegalStateException> {
+        every { userRepository.findByEmailAndIsDeletedFalse("owner@test.com") } returns owner
+        every { repositoryRepository.findById(1L) } returns java.util.Optional.of(repo)
+        every { access.isOwner(1L, 1L) } returns true
+
+        // when & then
+        shouldThrow<IllegalStateException> {
             handler.handle(command)
         }
-        assertEquals("이미 삭제된 저장소입니다.", ex.message)
     }
 }

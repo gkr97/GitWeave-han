@@ -118,7 +118,7 @@ class BranchCommandHandler(
             isProtected = false,
             protectionRule = null
         )
-        branchRepository.save(newBranch)
+        val savedBranch = branchRepository.save(newBranch)
 
         // 3) 이벤트 발행
         events.publishEvent(BranchCreated(repo.id, fullRef, newBranch.headCommitHash))
@@ -128,6 +128,6 @@ class BranchCommandHandler(
             evictDetailAndBranches = true,
             evictLists = true
         )
-        return newBranch.id
+        return savedBranch.id
     }
 }

@@ -36,7 +36,7 @@ class UserProfileCommandServiceTest {
         val user = UserFixture.default(id = userId)
 
         whenever(userRepository.findByIdAndIsDeletedFalse(userId)).thenReturn(user)
-        whenever(s3Uploader.upload(imageFile, "user-profile-pictures/$userId")).thenReturn(imageUrl)
+        whenever(s3Uploader.upload(any(), eq("user-profile-pictures/$userId"))).thenReturn(imageUrl)
 
         // when
         val result = service.updateProfileImage(userId, imageFile)

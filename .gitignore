@@ -76,3 +76,4 @@ out/
 node_modules/
 .fleet/
 .voyager-server/
+voyager-server/
