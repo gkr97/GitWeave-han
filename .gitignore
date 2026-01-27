@@ -15,6 +15,7 @@ build/obj/
 # 환경 변수/로컬 설정
 env
 env
+.env
 .env.*
 .envrc
 
@@ -76,4 +77,4 @@ out/
 node_modules/
 .fleet/
 .voyager-server/
-voyager-server/
+voyager-server/.env
