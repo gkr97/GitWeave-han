@@ -1,8 +1,10 @@
 package com.example.gitserver.module.common.application.service
 
+import com.example.gitserver.common.exception.CodeGroupNotFoundException
 import com.example.gitserver.module.common.dto.CommonCodeDetailResponse
 import com.example.gitserver.module.common.infrastructure.repository.CommonCodeDetailRepository
 import com.example.gitserver.module.common.infrastructure.repository.CommonCodeRepository
+import com.example.gitserver.module.repository.exception.InvalidVisibilityCodeException
 import org.springframework.cache.annotation.Cacheable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -42,7 +44,7 @@ class CommonCodeCacheService(
     fun getVisibilityCodeId(visibility: String): Long {
         val details = getCodeDetailsOrLoad("VISIBILITY")
         val codeDetail = details.find { it.code.equals(visibility, ignoreCase = true) }
-            ?: throw IllegalArgumentException("존재하지 않는 visibility: $visibility")
+            ?: throw InvalidVisibilityCodeException(visibility) as Throwable
         return codeDetail.id
     }
 }

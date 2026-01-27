@@ -52,6 +52,7 @@ class SecurityConfig(
                         "/webjars/**",
                         "/{ownerId}/{repo}.git/**",
                         "/api/v1/repositories/*/download",
+                        "/actuator/health",
                         "/error"
                     ).permitAll()
                     .anyRequest().authenticated()

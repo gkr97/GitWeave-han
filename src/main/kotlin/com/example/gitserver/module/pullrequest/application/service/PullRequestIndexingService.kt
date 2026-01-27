@@ -6,6 +6,7 @@ import com.example.gitserver.module.pullrequest.application.query.model.PullRequ
 import com.example.gitserver.module.pullrequest.infrastructure.persistence.PullRequestFileJdbcIndexRepository
 import com.example.gitserver.module.pullrequest.infrastructure.persistence.PullRequestRepository
 import com.example.gitserver.module.gitindex.infrastructure.git.GitPathResolver
+import com.example.gitserver.module.pullrequest.exception.PullRequestNotFoundException
 import mu.KotlinLogging
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -31,7 +32,7 @@ class PullRequestIndexingService(
     @Transactional
     fun reindex(prId: Long, repoId: Long, base: String, head: String) {
         val pr = pullRequestRepository.findById(prId)
-            .orElseThrow { IllegalArgumentException("PR 없음: $prId") }
+            .orElseThrow { PullRequestNotFoundException(prId) }
 
         val ownerId = pr.repository.owner.id
         val repoName = pr.repository.name

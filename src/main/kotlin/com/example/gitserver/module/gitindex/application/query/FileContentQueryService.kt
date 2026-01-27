@@ -14,8 +14,8 @@ import org.eclipse.jgit.revwalk.RevWalk
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder
 import org.eclipse.jgit.treewalk.TreeWalk
 import org.springframework.stereotype.Service
+import com.example.gitserver.common.util.PathSecurityUtils
 import java.io.File
-import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.time.Duration.ofMinutes
 import java.time.ZoneId
@@ -43,10 +43,9 @@ class FileContentQueryService(
         require(!commitHash.isNullOrBlank()) { "commitHash는 필수입니다." }
         val hash = commitHash!!
 
-        val decodedPath = URLDecoder.decode(path, StandardCharsets.UTF_8)
-        val normPath = normalizePath(decodedPath)
+        val normPath = PathSecurityUtils.sanitizePath(path)
 
-        log.info { "[FileContent] repo=$repositoryId commit=$hash path(raw)=$path path(decoded)=$decodedPath path(norm)=$normPath branch=$branch" }
+        log.info { "[FileContent] repo=$repositoryId commit=$hash path(raw)=$path path(norm)=$normPath branch=$branch" }
 
         val repoEntity = repositoryRepository.findByIdWithOwner(repositoryId)
             ?: throw RepositoryNotFoundException(repositoryId)
@@ -68,7 +67,7 @@ class FileContentQueryService(
                         }
 
                     val blobOid = findBlob(repo, tree, normPath)
-                        ?: throw NoSuchElementException("파일을 찾을 수 없습니다: $normPath")
+                        ?: throw com.example.gitserver.common.exception.EntityNotFoundException("파일", normPath)
 
                     val loader = repo.open(blobOid)
                     val size = loader.size
@@ -151,12 +150,5 @@ class FileContentQueryService(
             "pdf" -> "application/pdf"
             else -> "application/octet-stream"
         }
-    }
-
-    private fun normalizePath(input: String): String {
-        val trimmed = input.trim().trim('/')
-        require(!trimmed.contains('\u0000')) { "잘못된 경로입니다." }
-        require(!trimmed.contains("..")) { "상위 경로 접근은 허용되지 않습니다." }
-        return trimmed.replace('\\', '/')
     }
 }

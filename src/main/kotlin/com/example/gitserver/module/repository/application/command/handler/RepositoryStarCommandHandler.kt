@@ -18,6 +18,8 @@ import org.springframework.context.ApplicationEventPublisher
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import jakarta.persistence.LockModeType
+import org.springframework.data.jpa.repository.Lock
 import java.time.LocalDateTime
 
 @Service

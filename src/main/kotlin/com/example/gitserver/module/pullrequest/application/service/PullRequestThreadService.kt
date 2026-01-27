@@ -2,6 +2,7 @@ package com.example.gitserver.module.pullrequest.application.service
 
 import com.example.gitserver.module.pullrequest.infrastructure.persistence.PullRequestThreadRepository
 import com.example.gitserver.module.pullrequest.interfaces.dto.ThreadResolveResponse
+import com.example.gitserver.module.pullrequest.exception.ThreadNotFound
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -20,7 +21,7 @@ class PullRequestThreadService(
     @Transactional
     fun toggleResolved(threadId: Long, resolved: Boolean): ThreadResolveResponse {
         val thread = threadRepo.findById(threadId)
-            .orElseThrow { IllegalArgumentException("Thread not found: $threadId") }
+            .orElseThrow { ThreadNotFound(threadId) }
 
         thread.resolved = resolved
         threadRepo.save(thread)

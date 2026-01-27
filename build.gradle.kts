@@ -34,11 +34,16 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-graphql")
     implementation("org.springframework.boot:spring-boot-starter-mail")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("com.graphql-java:graphql-java-extended-scalars:20.1")
     implementation("org.springframework.boot:spring-boot-starter-cache")
     implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
     implementation("org.springframework.boot:spring-boot-starter-aop")
     implementation("org.springframework.retry:spring-retry")
+    
+    // Resilience4j (Circuit Breaker, Retry, Rate Limiter)
+    implementation("io.github.resilience4j:resilience4j-spring-boot3:2.1.0")
+    implementation("io.github.resilience4j:resilience4j-kotlin:2.1.0")
 
     // Kotlin
     implementation("org.jetbrains.kotlin:kotlin-reflect")
@@ -51,6 +56,9 @@ dependencies {
     implementation("org.flywaydb:flyway-mysql")
     implementation("org.hibernate.validator:hibernate-validator")
     implementation("jakarta.validation:jakarta.validation-api")
+
+    //env
+    implementation("me.paulschwarz:spring-dotenv:4.0.0")
 
     // Logging
     implementation("io.github.microutils:kotlin-logging-jvm:3.0.5")

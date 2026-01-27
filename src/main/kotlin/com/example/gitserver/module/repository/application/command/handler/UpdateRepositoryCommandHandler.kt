@@ -31,7 +31,7 @@ class UpdateRepositoryCommandHandler(
     @Transactional
     fun handle(command: UpdateRepositoryCommand) {
         val repo = repositoryRepository.findByIdAndIsDeletedFalse(command.repositoryId)
-            ?: throw IllegalArgumentException("존재하지 않는 레포지터리입니다.")
+            ?: throw com.example.gitserver.module.repository.exception.RepositoryNotFoundException(command.repositoryId)
 
         if (!access.isOwner(repo.id, command.requesterId)) {
             log.warn { "수정 권한 없음: userId=${command.requesterId}, repoId=${command.repositoryId}" }
@@ -41,7 +41,7 @@ class UpdateRepositoryCommandHandler(
         val isDuplicate = repositoryRepository.existsByOwnerIdAndNameAndIdNot(
             ownerId = command.requesterId, name = command.newName, exceptId = repo.id
         )
-        if (isDuplicate) throw IllegalArgumentException("이미 동일한 이름의 레포지터리가 존재합니다.")
+        if (isDuplicate) throw com.example.gitserver.module.repository.exception.DuplicateRepositoryNameException(command.newName)
 
         val oldName = repo.name
         val isNameChanged = oldName != command.newName

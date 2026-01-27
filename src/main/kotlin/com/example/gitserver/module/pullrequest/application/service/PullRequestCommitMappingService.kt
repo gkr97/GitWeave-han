@@ -5,6 +5,7 @@ import com.example.gitserver.module.gitindex.infrastructure.git.GitPathResolver
 import com.example.gitserver.module.pullrequest.domain.PullRequestCommit
 import com.example.gitserver.module.pullrequest.infrastructure.persistence.PullRequestCommitRepository
 import com.example.gitserver.module.pullrequest.infrastructure.persistence.PullRequestRepository
+import com.example.gitserver.module.pullrequest.exception.PullRequestNotFoundException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -20,7 +21,7 @@ class PullRequestCommitMappingService(
      */
     @Transactional
     fun refresh(prId: Long, repoId: Long, base: String, head: String) {
-        val pr = prRepository.findById(prId).orElseThrow { IllegalArgumentException("PR 없음: $prId") }
+        val pr = prRepository.findById(prId).orElseThrow { PullRequestNotFoundException(prId) }
         require(pr.repository.id == repoId) { "PR이 저장소에 속하지 않습니다." }
 
         val bare = gitPathResolver.bareDir(pr.repository.owner.id, pr.repository.name)
@@ -44,7 +45,7 @@ class PullRequestCommitMappingService(
      */
     @Transactional(readOnly = true)
     fun listHashes(prId: Long): List<String> {
-        val pr = prRepository.findById(prId).orElseThrow { IllegalArgumentException("PR 없음: $prId") }
+        val pr = prRepository.findById(prId).orElseThrow { PullRequestNotFoundException(prId) }
         val bare = gitPathResolver.bareDir(pr.repository.owner.id, pr.repository.name)
         val base = pr.baseCommitHash ?: return emptyList()
         val head = pr.headCommitHash ?: return emptyList()

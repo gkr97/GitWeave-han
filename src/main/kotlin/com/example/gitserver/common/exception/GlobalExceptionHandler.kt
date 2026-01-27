@@ -12,13 +12,20 @@ import org.springframework.web.bind.MissingServletRequestParameterException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
+import org.springframework.core.env.Environment
+import org.springframework.web.server.ResponseStatusException
 import java.time.Instant
 
 
 private val logger = KotlinLogging.logger {}
 
 @RestControllerAdvice
-class GlobalExceptionHandler {
+class GlobalExceptionHandler(
+    private val environment: Environment
+) {
+    
+    private val isDevelopment: Boolean
+        get() = environment.activeProfiles.contains("dev")
 
     /** [ADD] 도메인 예외 매핑 */
     @ExceptionHandler(DomainException::class)
@@ -53,9 +60,29 @@ class GlobalExceptionHandler {
     fun handleValidationException(ex: MethodArgumentNotValidException): ResponseEntity<ErrorResponse> {
         val errorMsg = ex.bindingResult.fieldErrors.joinToString(", ") { "${it.field}: ${it.defaultMessage}" }
         logger.warn { "ValidationException: $errorMsg" }
+        // 개발 환경에서만 상세 메시지 제공
+        val isDevelopment = System.getProperty("spring.profiles.active")?.contains("dev") == true
+        val responseMessage = if (isDevelopment) {
+            errorMsg
+        } else {
+            "Validation failed. Please check your input."
+        }
         return ResponseEntity.badRequest().body(
-            ErrorResponse(code = "VALIDATION_ERROR", message = errorMsg, timestamp = Instant.now())
+            ErrorResponse(code = "VALIDATION_ERROR", message = responseMessage, timestamp = Instant.now())
         )
+    }
+
+    @ExceptionHandler(ResponseStatusException::class)
+    fun handleResponseStatusException(e: ResponseStatusException): ResponseEntity<ErrorResponse> {
+        return ResponseEntity
+            .status(e.statusCode)
+            .body(
+                ErrorResponse(
+                    code = e.statusCode.toString(),
+                    message = e.reason ?: "Error",
+                    timestamp = Instant.now()
+                )
+            )
     }
 
     /** 잘못된 요청 파라미터 400 */
@@ -64,9 +91,15 @@ class GlobalExceptionHandler {
         MethodArgumentTypeMismatchException::class
     )
     fun handleBadRequest(ex: Exception): ResponseEntity<ErrorResponse> {
-        logger.warn { "BadRequestException: ${ex.message}" }
+        logger.warn { "BadRequestException: ${ex.javaClass.simpleName}" }
+        // 파라미터 이름 등 민감 정보는 로그에만 기록
+        val errorMessage = if (isDevelopment) {
+            ex.message ?: "Bad request"
+        } else {
+            "Invalid request parameters"
+        }
         return ResponseEntity.badRequest().body(
-            ErrorResponse(code = "BAD_REQUEST", message = ex.message ?: "Bad request", timestamp = Instant.now())
+            ErrorResponse(code = "BAD_REQUEST", message = errorMessage, timestamp = Instant.now())
         )
     }
 
@@ -99,9 +132,18 @@ class GlobalExceptionHandler {
     /** 그 외 500 */
     @ExceptionHandler(Exception::class)
     fun handleException(ex: Exception): ResponseEntity<ErrorResponse> {
-        logger.error(ex) { "Unhandled Exception" }
+        // 민감한 정보 노출 방지: 스택 트레이스는 로그에만 기록
+        logger.error(ex) { "Unhandled Exception: ${ex.javaClass.simpleName}" }
+        
+        // 프로덕션 환경에서는 상세 에러 메시지 숨김
+        val errorMessage = if (isDevelopment) {
+            ex.message ?: "Internal server error"
+        } else {
+            "Internal server error. Please contact support if the problem persists."
+        }
+        
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
-            ErrorResponse(code = "INTERNAL_ERROR", message = ex.message ?: "Internal server error", timestamp = Instant.now())
+            ErrorResponse(code = "INTERNAL_ERROR", message = errorMessage, timestamp = Instant.now())
         )
     }
 }

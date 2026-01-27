@@ -6,6 +6,7 @@ import com.example.gitserver.module.pullrequest.domain.PrStatus
 import com.example.gitserver.module.pullrequest.exception.InvalidStateTransition
 import com.example.gitserver.module.pullrequest.exception.PermissionDenied
 import com.example.gitserver.module.pullrequest.exception.RepositoryMismatch
+import com.example.gitserver.module.pullrequest.exception.PullRequestNotFoundException
 import com.example.gitserver.module.repository.exception.RepositoryNotFoundException
 import com.example.gitserver.module.repository.infrastructure.persistence.CollaboratorRepository
 import com.example.gitserver.module.repository.infrastructure.persistence.RepositoryRepository
@@ -38,7 +39,7 @@ class UpdatePullRequestCommandHandler(
         val requester = userRepository.findByIdAndIsDeletedFalse(cmd.requesterId)
             ?: throw UserNotFoundException(cmd.requesterId)
         val pr = pullRequestRepository.findById(cmd.pullRequestId)
-            .orElseThrow { IllegalArgumentException("PR 없음: ${cmd.pullRequestId}") }
+            .orElseThrow { PullRequestNotFoundException(cmd.pullRequestId) }
 
         if (pr.repository.id != repo.id) throw RepositoryMismatch(repo.id, pr.id)
 

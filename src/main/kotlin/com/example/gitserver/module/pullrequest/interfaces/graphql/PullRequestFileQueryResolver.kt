@@ -38,10 +38,12 @@ class PullRequestFileQueryResolver(
         @Argument forceFull: Boolean?,
         @AuthenticationPrincipal user: CustomUserDetails?
     ): FileDiffResponse {
+        // Path Traversal 방어
+        val safeFilePath = com.example.gitserver.common.util.PathSecurityUtils.sanitizePath(filePath)
         val userId = user?.getUserId()
 
         val files = fileService.listFiles(prId, userId)
-        val fileMeta = files.firstOrNull { it.path == filePath }
+        val fileMeta = files.firstOrNull { it.path == safeFilePath }
             ?: error("PR($prId)에서 파일 메타데이터를 찾을 수 없습니다. path=$filePath")
 
         if (fileMeta.isBinary) {
@@ -63,13 +65,13 @@ class PullRequestFileQueryResolver(
         val (parsed, truncated) = diffService.getFileParsedHunks(
             repositoryId = repositoryId,
             prId = prId,
-            path = filePath,
+            path = safeFilePath,
             totalFiles = files.size,
             forceFull = forceFull == true
         )
 
         val threads = if (!truncated) {
-            discussionAssembler.buildThreads(prId, filePath, parsed)
+            discussionAssembler.buildThreads(prId, safeFilePath, parsed)
         } else emptyList()
 
         return UnifiedDiffMapper.toResponse(

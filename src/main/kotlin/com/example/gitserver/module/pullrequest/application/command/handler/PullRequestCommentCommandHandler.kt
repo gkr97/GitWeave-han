@@ -7,6 +7,8 @@ import com.example.gitserver.module.pullrequest.domain.event.PullRequestCommentC
 import com.example.gitserver.module.pullrequest.domain.event.PullRequestCommentDeleted
 import com.example.gitserver.module.pullrequest.exception.PermissionDenied
 import com.example.gitserver.module.pullrequest.exception.RepositoryMismatch
+import com.example.gitserver.module.pullrequest.exception.PullRequestNotFoundException
+import com.example.gitserver.module.pullrequest.exception.CommentNotFound
 import com.example.gitserver.module.pullrequest.infrastructure.persistence.PullRequestCommentRepository
 import com.example.gitserver.module.pullrequest.infrastructure.persistence.PullRequestRepository
 import com.example.gitserver.module.repository.exception.RepositoryNotFoundException
@@ -36,7 +38,7 @@ class PullRequestCommentCommandHandler(
         val repo = repositoryRepository.findByIdAndIsDeletedFalse(cmd.repositoryId)
             ?: throw RepositoryNotFoundException(cmd.repositoryId)
         val pr = pullRequestRepository.findById(cmd.pullRequestId)
-            .orElseThrow { IllegalArgumentException("PR 없음: ${cmd.pullRequestId}") }
+            .orElseThrow { PullRequestNotFoundException(cmd.pullRequestId) }
         if (pr.repository.id != repo.id) throw RepositoryMismatch(repo.id, pr.id)
 
         val author = userRepository.findByIdAndIsDeletedFalse(cmd.authorId)
@@ -53,13 +55,15 @@ class PullRequestCommentCommandHandler(
         }
         if (type == "inline" || type == "review") {
             require(!cmd.filePath.isNullOrBlank()) { "inline/review 코멘트는 filePath가 필요합니다." }
+            // Path Traversal 방어
+            com.example.gitserver.common.util.PathSecurityUtils.sanitizePath(cmd.filePath!!)
         }
 
         val entity = PullRequestComment(
             pullRequest = pr,
             author = author,
             content = cmd.content,
-            filePath = cmd.filePath,
+            filePath = cmd.filePath?.let { com.example.gitserver.common.util.PathSecurityUtils.sanitizePath(it) },
             lineNumber = cmd.lineNumber,
             commentType = type
         )
@@ -77,13 +81,13 @@ class PullRequestCommentCommandHandler(
         val repo = repositoryRepository.findByIdAndIsDeletedFalse(cmd.repositoryId)
             ?: throw RepositoryNotFoundException(cmd.repositoryId)
         val pr = pullRequestRepository.findById(cmd.pullRequestId)
-            .orElseThrow { IllegalArgumentException("PR 없음: ${cmd.pullRequestId}") }
+            .orElseThrow { PullRequestNotFoundException(cmd.pullRequestId) }
         if (pr.repository.id != repo.id) throw RepositoryMismatch(repo.id, pr.id)
 
         val requester = userRepository.findByIdAndIsDeletedFalse(cmd.requesterId)
             ?: throw UserNotFoundException(cmd.requesterId)
         val comment = commentRepository.findById(cmd.commentId)
-            .orElseThrow { IllegalArgumentException("코멘트 없음: ${cmd.commentId}") }
+            .orElseThrow { CommentNotFound(cmd.commentId) }
 
         val owner = repo.owner.id == requester.id
         val authorOfComment = comment.author.id == requester.id

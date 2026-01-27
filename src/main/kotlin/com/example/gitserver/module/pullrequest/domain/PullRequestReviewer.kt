@@ -32,5 +32,9 @@ data class PullRequestReviewer(
     val createdAt: LocalDateTime = LocalDateTime.now(),
 
     @Column(name = "updated_at")
-    var updatedAt: LocalDateTime? = null
+    var updatedAt: LocalDateTime? = null,
+
+    @Version
+    @Column(name = "version", nullable = false)
+    var version: Long = 0L
 )

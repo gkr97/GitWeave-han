@@ -58,5 +58,9 @@ data class PullRequest(
     var baseCommitHash: String? = null,
 
     @Column(name = "head_commit_hash", length = 40)
-    var headCommitHash: String? = null
+    var headCommitHash: String? = null,
+
+    @Version
+    @Column(name = "version", nullable = false)
+    var version: Long = 0L
 ) 

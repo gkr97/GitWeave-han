@@ -1,14 +1,18 @@
 package com.example.gitserver.module.search.infrastructure.opensearch
 
+import com.example.gitserver.common.resilience.ResilienceUtils
 import com.example.gitserver.module.repository.domain.Repository
+import com.example.gitserver.module.repository.exception.RepositoryNotFoundException
 import com.example.gitserver.module.repository.infrastructure.persistence.RepositoryRepository
 import com.example.gitserver.module.repository.infrastructure.persistence.RepositoryStatsRepository
 import com.example.gitserver.module.search.domain.RepositoryDoc
-
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
+import io.github.resilience4j.retry.RetryRegistry
 import mu.KotlinLogging
 import org.opensearch.client.opensearch.OpenSearchClient
 import org.opensearch.client.opensearch.core.BulkRequest
+import org.opensearch.client.opensearch.core.DeleteRequest
 import org.opensearch.client.opensearch.core.IndexRequest
 import org.opensearch.client.opensearch.core.bulk.BulkOperation
 import org.springframework.stereotype.Component
@@ -19,14 +23,16 @@ class RepositorySearchSync(
     private val osClient: OpenSearchClient,
     private val topicRepo: RepositoryTopicRepository,
     private val statsJpaRepo: RepositoryStatsRepository,
-    private val repositoryJpaRepo: RepositoryRepository
+    private val repositoryJpaRepo: RepositoryRepository,
+    private val circuitBreakerRegistry: CircuitBreakerRegistry,
+    private val retryRegistry: RetryRegistry
 ) {
     private val mapper = jacksonObjectMapper()
     private val log = KotlinLogging.logger {}
 
     fun indexRepository(repo: Repository) {
         val repoId = repo.id
-        if (repoId == 0L) throw IllegalArgumentException("Repository.id is null/0")
+        if (repoId == 0L) throw RepositoryNotFoundException(0L)
 
         val topics = runCatching { topicRepo.findTopicsByRepositoryId(repoId) }.getOrDefault(emptyList())
         val stats = runCatching { statsJpaRepo.findById(repoId).orElse(null) }.getOrNull()
@@ -59,7 +65,12 @@ class RepositorySearchSync(
             updated_at = updatedAtIso
         )
 
-        try {
+        ResilienceUtils.executeWithResilience(
+            circuitBreakerName = "opensearch",
+            retryName = "opensearch",
+            circuitBreakerRegistry = circuitBreakerRegistry,
+            retryRegistry = retryRegistry
+        ) {
             val req = IndexRequest.Builder<RepositoryDoc>()
                 .index("repositories")
                 .id(repoId.toString())
@@ -67,9 +78,6 @@ class RepositorySearchSync(
                 .build()
             osClient.index(req)
             log.info { "OpenSearch indexed repository id=${repoId}" }
-        } catch (e: Exception) {
-            log.error(e) { "OpenSearch indexing failed for repo=$repoId" }
-            throw e
         }
     }
 
@@ -105,17 +113,36 @@ class RepositorySearchSync(
 
 
         val bulkReq = BulkRequest.Builder().operations(ops).build()
-        try {
+        ResilienceUtils.executeWithResilience(
+            circuitBreakerName = "opensearch",
+            retryName = "opensearch",
+            circuitBreakerRegistry = circuitBreakerRegistry,
+            retryRegistry = retryRegistry
+        ) {
             osClient.bulk(bulkReq)
             log.info { "OpenSearch bulk indexed ${repos.size} repositories" }
-        } catch (e: Exception) {
-            log.error(e) { "OpenSearch bulk indexing failed" }
-            throw e
         }
     }
 
     fun indexRepositoryById(repositoryId: Long) {
-        val repo = repositoryJpaRepo.findById(repositoryId).orElse(null) ?: throw IllegalArgumentException("Repository not found: $repositoryId")
+        val repo = repositoryJpaRepo.findById(repositoryId).orElse(null) 
+            ?: throw RepositoryNotFoundException(repositoryId)
         indexRepository(repo)
+    }
+
+    fun deleteRepositoryById(repositoryId: Long) {
+        ResilienceUtils.executeWithResilience(
+            circuitBreakerName = "opensearch",
+            retryName = "opensearch",
+            circuitBreakerRegistry = circuitBreakerRegistry,
+            retryRegistry = retryRegistry
+        ) {
+            val req = DeleteRequest.Builder()
+                .index("repositories")
+                .id(repositoryId.toString())
+                .build()
+            osClient.delete(req)
+            log.info { "OpenSearch deleted repository id=$repositoryId" }
+        }
     }
 }

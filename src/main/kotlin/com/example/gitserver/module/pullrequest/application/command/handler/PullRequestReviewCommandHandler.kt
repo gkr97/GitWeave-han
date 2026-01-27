@@ -16,6 +16,7 @@ import com.example.gitserver.module.pullrequest.infrastructure.persistence.PullR
 import com.example.gitserver.module.user.infrastructure.persistence.UserRepository
 import com.example.gitserver.module.repository.exception.RepositoryNotFoundException
 import com.example.gitserver.module.user.exception.UserNotFoundException
+import com.example.gitserver.module.pullrequest.exception.PullRequestNotFoundException
 import mu.KotlinLogging
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
@@ -74,27 +75,63 @@ class PullRequestReviewCommandHandler(
     /** 리뷰 승인 */
     @Transactional
     fun handle(cmd: ApproveReviewCommand) {
-        val (_, pr, requester) = ctx(cmd.repositoryId, cmd.pullRequestId, cmd.requesterId)
-        assertOpen(pr.statusCodeId)
+        val maxRetries = 3
+        var attempt = 0
+        
+        while (attempt < maxRetries) {
+            try {
+                val (_, pr, requester) = ctx(cmd.repositoryId, cmd.pullRequestId, cmd.requesterId)
+                assertOpen(pr.statusCodeId)
 
-        val row = reviewerRepository.findByPullRequestIdAndReviewerId(pr.id, requester.id)
-            ?: throw NotReviewer()
-        row.statusCodeId = codes.prReviewStatusId(PrReviewStatus.APPROVED)
-        row.reviewedAt = LocalDateTime.now()
-        log.info { "[PR][Review][Approve] pr=${pr.id} by=${requester.id}" }
+                val row = reviewerRepository.findByPullRequestIdAndReviewerId(pr.id, requester.id)
+                    ?: throw NotReviewer()
+                row.statusCodeId = codes.prReviewStatusId(PrReviewStatus.APPROVED)
+                row.reviewedAt = LocalDateTime.now()
+                reviewerRepository.save(row) // Optimistic Lock 적용
+                
+                log.info { "[PR][Review][Approve] pr=${pr.id} by=${requester.id}" }
+                return
+                
+            } catch (e: org.springframework.orm.ObjectOptimisticLockingFailureException) {
+                attempt++
+                if (attempt >= maxRetries) {
+                    log.warn { "[PR][Review][Approve] Optimistic lock 실패: pr=${cmd.pullRequestId}" }
+                    throw InvalidStateTransition("다른 사용자가 먼저 변경했습니다. 페이지를 새로고침 후 다시 시도해주세요.")
+                }
+                Thread.sleep(50L * attempt)
+            }
+        }
     }
 
     /** 변경 요청 */
     @Transactional
     fun handle(cmd: RequestChangesCommand) {
-        val (_, pr, requester) = ctx(cmd.repositoryId, cmd.pullRequestId, cmd.requesterId)
-        assertOpen(pr.statusCodeId)
+        val maxRetries = 3
+        var attempt = 0
+        
+        while (attempt < maxRetries) {
+            try {
+                val (_, pr, requester) = ctx(cmd.repositoryId, cmd.pullRequestId, cmd.requesterId)
+                assertOpen(pr.statusCodeId)
 
-        val row = reviewerRepository.findByPullRequestIdAndReviewerId(pr.id, requester.id)
-            ?: throw NotReviewer()
-        row.statusCodeId = codes.prReviewStatusId(PrReviewStatus.CHANGES_REQUESTED)
-        row.reviewedAt = LocalDateTime.now()
-        log.info { "[PR][Review][ChangesRequested] pr=${pr.id} by=${requester.id} reason=${cmd.reason}" }
+                val row = reviewerRepository.findByPullRequestIdAndReviewerId(pr.id, requester.id)
+                    ?: throw NotReviewer()
+                row.statusCodeId = codes.prReviewStatusId(PrReviewStatus.CHANGES_REQUESTED)
+                row.reviewedAt = LocalDateTime.now()
+                reviewerRepository.save(row) // Optimistic Lock 적용
+                
+                log.info { "[PR][Review][ChangesRequested] pr=${pr.id} by=${requester.id} reason=${cmd.reason}" }
+                return
+                
+            } catch (e: org.springframework.orm.ObjectOptimisticLockingFailureException) {
+                attempt++
+                if (attempt >= maxRetries) {
+                    log.warn { "[PR][Review][ChangesRequested] Optimistic lock 실패: pr=${cmd.pullRequestId}" }
+                    throw InvalidStateTransition("다른 사용자가 먼저 변경했습니다. 페이지를 새로고침 후 다시 시도해주세요.")
+                }
+                Thread.sleep(50L * attempt)
+            }
+        }
     }
 
     /** 리뷰 기각 */
@@ -109,7 +146,6 @@ class PullRequestReviewCommandHandler(
             ?: throw NotReviewer()
         row.statusCodeId = codes.prReviewStatusId(PrReviewStatus.DISMISSED)
         row.reviewedAt = LocalDateTime.now()
-        // events.publishEvent(ReviewDismissed(pr.id, targetId, requester.id))
         log.info { "[PR][Review][Dismiss] pr=${pr.id} target=${targetId} by=${requester.id}" }
     }
 
@@ -125,7 +161,7 @@ class PullRequestReviewCommandHandler(
     private fun ctx(repoId: Long, prId: Long, userId: Long) = Triple(
         repositoryRepository.findByIdAndIsDeletedFalse(repoId)
             ?: throw RepositoryNotFoundException(repoId),
-        prRepository.findById(prId).orElseThrow { IllegalArgumentException("PR 없음: $prId") },
+        prRepository.findById(prId).orElseThrow { PullRequestNotFoundException(prId) },
         userRepository.findByIdAndIsDeletedFalse(userId)
             ?: throw UserNotFoundException(userId)
     )

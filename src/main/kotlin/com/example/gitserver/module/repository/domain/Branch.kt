@@ -40,6 +40,9 @@ data class Branch(
     @Column(name = "is_default", nullable = false)
     var isDefault: Boolean = false,
 
+    @Version
+    @Column(name = "version", nullable = false)
+    var version: Long = 0L
 ) {
 
     @PrePersist

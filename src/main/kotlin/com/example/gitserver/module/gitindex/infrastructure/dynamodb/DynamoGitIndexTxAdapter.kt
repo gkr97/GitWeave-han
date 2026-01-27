@@ -1,10 +1,13 @@
 package com.example.gitserver.module.gitindex.infrastructure.dynamodb
 
+import com.example.gitserver.common.resilience.ResilienceUtils
 import com.example.gitserver.module.gitindex.domain.Blob
 import com.example.gitserver.module.gitindex.domain.BlobTree
 import com.example.gitserver.module.gitindex.domain.Commit
 import com.example.gitserver.module.gitindex.domain.port.IndexTxRepository
 import com.example.gitserver.module.gitindex.domain.vo.CommitHash
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
+import io.github.resilience4j.retry.RetryRegistry
 import mu.KotlinLogging
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Repository
@@ -19,6 +22,8 @@ private val log = KotlinLogging.logger {}
 @Repository
 class DynamoGitIndexTxAdapter(
     private val dynamoDbClient: DynamoDbClient,
+    private val circuitBreakerRegistry: CircuitBreakerRegistry,
+    private val retryRegistry: RetryRegistry,
     @Value("\${aws.dynamodb.gitIndexTable}") private val tableName: String
 ) : IndexTxRepository {
 
@@ -53,43 +58,51 @@ class DynamoGitIndexTxAdapter(
      * - 최대 5회 재시도(지수 백오프 + 지터)
      */
     override fun saveBlobAndTree(blob: Blob, tree: BlobTree) {
-        val blobPut = Put.builder()
-            .tableName(tableName)
-            .item(toBlobItem(blob))
-            .build()
+        // Circuit Breaker와 Retry 적용 (기존 수동 재시도 로직 유지)
+        ResilienceUtils.executeWithResilience(
+            circuitBreakerName = "dynamodb",
+            retryName = "dynamodb",
+            circuitBreakerRegistry = circuitBreakerRegistry,
+            retryRegistry = retryRegistry
+        ) {
+            val blobPut = Put.builder()
+                .tableName(tableName)
+                .item(toBlobItem(blob))
+                .build()
 
-        val treePut = Put.builder()
-            .tableName(tableName)
-            .item(toTreeItem(tree))
-            .conditionExpression("attribute_not_exists(PK) AND attribute_not_exists(SK)")
-            .build()
+            val treePut = Put.builder()
+                .tableName(tableName)
+                .item(toTreeItem(tree))
+                .conditionExpression("attribute_not_exists(PK) AND attribute_not_exists(SK)")
+                .build()
 
-        val txItems = listOf(
-            TransactWriteItem.builder().put(blobPut).build(),
-            TransactWriteItem.builder().put(treePut).build()
-        )
+            val txItems = listOf(
+                TransactWriteItem.builder().put(blobPut).build(),
+                TransactWriteItem.builder().put(treePut).build()
+            )
 
-        val maxRetries = 5
-        var attempt = 0
-        while (true) {
-            try {
-                dynamoDbClient.transactWriteItems { b ->
-                    b.transactItems(txItems)
-                        .clientRequestToken(UUID.randomUUID().toString())
+            val maxRetries = 5
+            var attempt = 0
+            while (true) {
+                try {
+                    dynamoDbClient.transactWriteItems { b ->
+                        b.transactItems(txItems)
+                            .clientRequestToken(UUID.randomUUID().toString())
+                    }
+                    return@executeWithResilience
+                } catch (e: TransactionCanceledException) {
+                    val codes = e.cancellationReasons()?.mapNotNull { it?.code() } ?: emptyList()
+                    if (codes.isNotEmpty() && codes.all { it == "ConditionalCheckFailed" }) {
+                        log.debug { "[DDB] saveBlobAndTree idempotent (TREE exists). blob=${blob.hash.value}, path=${tree.path.value}" }
+                        return@executeWithResilience
+                    }
+                    attempt++
+                    if (attempt >= maxRetries) throw e
+                    val base = 50L * (1L shl (attempt - 1))
+                    val jitter = ThreadLocalRandom.current().nextLong(0, 50)
+                    log.debug { "[DDB] saveBlobAndTree retrying... attempt=$attempt, errCodes=$codes" }
+                    Thread.sleep((base + jitter).coerceAtMost(1000))
                 }
-                return
-            } catch (e: TransactionCanceledException) {
-                val codes = e.cancellationReasons()?.mapNotNull { it?.code() } ?: emptyList()
-                if (codes.isNotEmpty() && codes.all { it == "ConditionalCheckFailed" }) {
-                    log.debug { "[DDB] saveBlobAndTree idempotent (TREE exists). blob=${blob.hash.value}, path=${tree.path.value}" }
-                    return
-                }
-                attempt++
-                if (attempt >= maxRetries) throw e
-                val base = 50L * (1L shl (attempt - 1))
-                val jitter = ThreadLocalRandom.current().nextLong(0, 50)
-                log.debug { "[DDB] saveBlobAndTree retrying... attempt=$attempt, errCodes=$codes" }
-                Thread.sleep((base + jitter).coerceAtMost(1000))
             }
         }
     }

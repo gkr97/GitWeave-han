@@ -13,6 +13,8 @@ import com.example.gitserver.module.repository.domain.Collaborator
 import com.example.gitserver.module.repository.domain.Repository
 import com.example.gitserver.module.repository.domain.event.GitEventPublisher
 import com.example.gitserver.module.repository.domain.event.RepositoryCreated
+import com.example.gitserver.module.repository.domain.event.SyncBranchEvent
+import com.example.gitserver.module.repository.application.command.handler.GitRepositorySyncHandler
 import com.example.gitserver.module.repository.exception.*
 import com.example.gitserver.module.repository.infrastructure.persistence.BranchRepository
 import com.example.gitserver.module.repository.infrastructure.persistence.CollaboratorRepository
@@ -37,7 +39,8 @@ class CreateRepositoryCommandHandler(
     private val userRepository: UserRepository,
     private val commitService: CommitQueryService,
     private val evictor: RepoCacheEvictor,
-    private val events: ApplicationEventPublisher
+    private val events: ApplicationEventPublisher,
+    private val gitRepositorySyncHandler: GitRepositorySyncHandler
 
     ) {
     private val log = KotlinLogging.logger {}
@@ -82,38 +85,12 @@ class CreateRepositoryCommandHandler(
         repositoryRepository.saveAndFlush(repository)
         log.info { "저장소 DB 저장 완료: id=${repository.id}" }
 
-        try {
-            Thread.startVirtualThread {
-                gitRepositoryPort.initEmptyGitDirectory(
-                    repository,
-                    initializeReadme = command.initializeReadme,
-                    gitignoreTemplate = command.gitignoreTemplate,
-                    licenseTemplate = command.licenseTemplate
-                )
-            }.join()
-            log.info { "Git 저장소 초기화 완료: ${repository.name}" }
-        } catch (ex: Exception) {
-            log.error(ex) { "Git 저장소 초기화 실패: ${repository.name}, 롤백 수행" }
-            repositoryRepository.delete(repository)
-            gitRepositoryPort.deleteGitDirectories(repository)
-            throw GitInitializationFailedException(repository.id)
-        }
-
         val defaultBranchFullRef = toFullRef(command.defaultBranch)
 
+        // 브랜치를 먼저 생성   (headCommitHash는 Git 초기화 완료 후 업데이트)
         val branch = Branch.createDefault(repository, defaultBranchFullRef, command.owner)
-
-        val headCommitHash = gitRepositoryPort.getHeadCommitHash(repository, defaultBranchFullRef)
-        branch.updateHeadCommitHash(headCommitHash)
-
-        val headCommit = commitService.getCommitInfo(repository.id, headCommitHash)
-        branch.lastCommitAt = headCommit?.committedAt
-            ?.atOffset(ZoneOffset.UTC)
-            ?.toLocalDateTime()
-            ?: branch.createdAt
-
         branchRepository.save(branch)
-        log.info { "기본 브랜치 생성 완료: ${branch.name}, HEAD=$headCommitHash" }
+        log.info { "기본 브랜치 생성 완료: ${branch.name} (HEAD는 Git 초기화 후 업데이트됨)" }
 
         val roleCodeId = commonCodeCacheService.getCodeDetailsOrLoad("ROLE")
             .firstOrNull { it.code == "owner" }?.id
@@ -152,6 +129,46 @@ class CreateRepositoryCommandHandler(
             TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
                 override fun afterCommit() {
                     try {
+                        // Git 초기화는 트랜잭션 외부에서 비동기로 수행
+                        Thread.startVirtualThread {
+                            try {
+                                gitRepositoryPort.initEmptyGitDirectory(
+                                    repository,
+                                    initializeReadme = command.initializeReadme,
+                                    gitignoreTemplate = command.gitignoreTemplate,
+                                    licenseTemplate = command.licenseTemplate
+                                )
+                                log.info { "Git 저장소 초기화 완료: ${repository.name}" }
+                                
+                                // Git 초기화 완료 후 브랜치 HEAD 업데이트
+                                try {
+                                    val headCommitHash = gitRepositoryPort.getHeadCommitHash(repository, defaultBranchFullRef)
+                                    gitRepositorySyncHandler.handle(
+                                        SyncBranchEvent(
+                                            repositoryId = repository.id,
+                                            branchName = command.defaultBranch,
+                                            newHeadCommit = headCommitHash,
+                                            lastCommitAtUtc = null
+                                        ),
+                                        creator = command.owner
+                                    )
+                                    log.info { "브랜치 HEAD 업데이트 완료: ${branch.name}, HEAD=$headCommitHash" }
+                                } catch (syncEx: Exception) {
+                                    log.error(syncEx) { "브랜치 HEAD 업데이트 실패: ${branch.name}" }
+                                }
+                            } catch (ex: Exception) {
+                                log.error(ex) { "Git 저장소 초기화 실패: ${repository.name}, 보상 트랜잭션 수행" }
+                                // 보상 트랜잭션
+                                try {
+                                    repositoryRepository.deleteById(repository.id)
+                                    gitRepositoryPort.deleteGitDirectories(repository)
+                                    log.warn { "저장소 보상 삭제 완료: id=${repository.id}" }
+                                } catch (cleanupEx: Exception) {
+                                    log.error(cleanupEx) { "저장소 보상 삭제 실패: id=${repository.id}" }
+                                }
+                            }
+                        }
+                        
                         events.publishEvent(RepositoryCreated(repository.id, repository.owner.id, repository.name))
                          gitEventPublisher.publish(
                             GitEvent(

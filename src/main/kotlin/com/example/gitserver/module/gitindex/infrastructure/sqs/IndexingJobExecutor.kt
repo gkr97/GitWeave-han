@@ -5,6 +5,7 @@ import com.example.gitserver.module.gitindex.application.command.IndexRepository
 import com.example.gitserver.module.gitindex.application.command.handler.IndexRepositoryCommandHandler
 import com.example.gitserver.module.gitindex.domain.event.GitEvent
 import com.example.gitserver.module.pullrequest.application.command.handler.PullRequestHeadUpdateOnPushHandler
+import com.example.gitserver.module.search.infrastructure.opensearch.RepositorySearchSync
 import org.springframework.stereotype.Service
 import java.nio.file.Path
 
@@ -15,8 +16,9 @@ import java.nio.file.Path
 class IndexingJobExecutor(
     private val handler: IndexRepositoryCommandHandler,
     private val prHeadUpdateOnPushHandler: PullRequestHeadUpdateOnPushHandler,
+    private val repositorySearchSync: RepositorySearchSync,
 ) {
-
+    private val log = mu.KotlinLogging.logger {}
     /**
      * Git 이벤트에 따라 레포지토리 인덱싱 작업을 실행합니다.
      * @param event Git 이벤트 정보
@@ -33,6 +35,14 @@ class IndexingJobExecutor(
             else -> {
                 // TODO 필요 시 추가 이벤트 처리
             }
+        }
+
+        runCatching {
+            log.info("before opensearch sync")
+            repositorySearchSync.indexRepositoryById(event.repositoryId)
+            log.info("after opensearch sync")
+        }.onFailure { e ->
+            log.error("opensearch sync failed", e)
         }
     }
 }

@@ -1,6 +1,9 @@
 package com.example.gitserver.module.gitindex.infrastructure.s3
 
+import com.example.gitserver.common.resilience.ResilienceUtils
 import com.example.gitserver.module.gitindex.domain.port.BlobObjectStorage
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
+import io.github.resilience4j.retry.RetryRegistry
 import mu.KotlinLogging
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
@@ -24,6 +27,8 @@ import kotlin.system.measureTimeMillis
 class S3BlobStorageAdapter(
     private val s3Client: S3Client,
     private val presigner: S3Presigner,
+    private val circuitBreakerRegistry: CircuitBreakerRegistry,
+    private val retryRegistry: RetryRegistry,
     @Value("\${cloud.aws.s3.bucket}") private val bucket: String,
     @Value("\${cloud.aws.s3.endpoint}") private val s3Endpoint: String,
     @Value("\${cloud.aws.s3.public-endpoint:}") private val s3PublicEndpoint: String?
@@ -44,21 +49,29 @@ class S3BlobStorageAdapter(
 
     /**
      * 바이트 배열을 S3에 저장합니다.
+     * Circuit Breaker와 Retry 적용
      */
     override fun putBytes(hash: String, bytes: ByteArray): String {
         val key = keyOf(hash)
-        if (!exists(key)) {
-            val req = PutObjectRequest.builder()
-                .bucket(bucket)
-                .key(key)
-                .contentLength(bytes.size.toLong())
-                .build()
-            s3Client.putObject(req, RequestBody.fromBytes(bytes))
-            log.debug { "[S3BlobStorage] putBytes ok key=$key size=${bytes.size}" }
-        } else {
-            log.debug { "[S3BlobStorage] putBytes skip exists key=$key" }
+        return ResilienceUtils.executeWithResilience(
+            circuitBreakerName = "s3",
+            retryName = "s3",
+            circuitBreakerRegistry = circuitBreakerRegistry,
+            retryRegistry = retryRegistry
+        ) {
+            if (!exists(key)) {
+                val req = PutObjectRequest.builder()
+                    .bucket(bucket)
+                    .key(key)
+                    .contentLength(bytes.size.toLong())
+                    .build()
+                s3Client.putObject(req, RequestBody.fromBytes(bytes))
+                log.debug { "[S3BlobStorage] putBytes ok key=$key size=${bytes.size}" }
+            } else {
+                log.debug { "[S3BlobStorage] putBytes skip exists key=$key" }
+            }
+            key
         }
-        return key
     }
 
     /**
@@ -99,6 +112,7 @@ class S3BlobStorageAdapter(
 
     /**
      * S3에서 다운로드용 사전 서명된 URL을 생성합니다.
+     * Circuit Breaker와 Retry 적용
      */
     override fun presignForDownload(
         hash: String,
@@ -107,26 +121,33 @@ class S3BlobStorageAdapter(
         ttl: Duration
     ): Pair<String, String> {
         val key = keyOf(hash)
-        val getReq = GetObjectRequest.builder()
-            .bucket(bucket)
-            .key(key)
-            .responseContentDisposition(buildContentDisposition(downloadFileName))
-            .responseContentType(mimeType ?: "application/octet-stream")
-            .build()
+        return ResilienceUtils.executeWithResilience(
+            circuitBreakerName = "s3",
+            retryName = "s3",
+            circuitBreakerRegistry = circuitBreakerRegistry,
+            retryRegistry = retryRegistry
+        ) {
+            val getReq = GetObjectRequest.builder()
+                .bucket(bucket)
+                .key(key)
+                .responseContentDisposition(buildContentDisposition(downloadFileName))
+                .responseContentType(mimeType ?: "application/octet-stream")
+                .build()
 
-        val preReq = GetObjectPresignRequest.builder()
-            .signatureDuration(ttl)
-            .getObjectRequest(getReq)
-            .build()
+            val preReq = GetObjectPresignRequest.builder()
+                .signatureDuration(ttl)
+                .getObjectRequest(getReq)
+                .build()
 
-        lateinit var url: String
-        val elapsed = measureTimeMillis {
-            url = presigner.presignGetObject(preReq).url().toString()
+            lateinit var url: String
+            val elapsed = measureTimeMillis {
+                url = presigner.presignGetObject(preReq).url().toString()
+            }
+            val expiresAt = Instant.now().plus(ttl).toString()
+            log.info { "[S3BlobStorage] presign ok key=$key ttlMin=${ttl.toMinutes()} elapsedMs=$elapsed" }
+
+            rewriteIfNeeded(url) to expiresAt
         }
-        val expiresAt = Instant.now().plus(ttl).toString()
-        log.info { "[S3BlobStorage] presign ok key=$key ttlMin=${ttl.toMinutes()} elapsedMs=$elapsed" }
-
-        return rewriteIfNeeded(url) to expiresAt
     }
     /**
      * 퍼블릭 엔드포인트가 설정된 경우, 사전 서명된 URL을 해당 엔드포인트로 재작성합니다.

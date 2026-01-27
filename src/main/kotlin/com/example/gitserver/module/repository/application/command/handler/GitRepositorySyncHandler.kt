@@ -111,12 +111,35 @@ class GitRepositorySyncHandler(
                     log.debug { "[RepoSync] 기본 브랜치로 설정 - repoId=${event.repositoryId}, ref=$fullRef" }
                 }
             } else {
-                val beforeHead = existing.headCommitHash
-                existing.headCommitHash = event.newHeadCommit
-                existing.lastCommitAt = committedAt
-                branchRepository.save(existing)
-                log.info {
-                    "[RepoSync] 브랜치 갱신 - repoId=${event.repositoryId}, ref=$fullRef, head $beforeHead -> ${event.newHeadCommit}, lastCommitAt=$committedAt"
+                val maxRetries = 3
+                var attempt = 0
+                var updated = false
+                
+                while (attempt < maxRetries && !updated) {
+                    try {
+                        // 최신 버전으로 다시 조회
+                        val current = branchRepository.findByRepositoryIdAndName(event.repositoryId, fullRef)
+                            ?: break
+                        
+                        val beforeHead = current.headCommitHash
+                        current.headCommitHash = event.newHeadCommit
+                        current.lastCommitAt = committedAt
+                        branchRepository.save(current)
+                        
+                        log.info {
+                            "[RepoSync] 브랜치 갱신 - repoId=${event.repositoryId}, ref=$fullRef, head $beforeHead -> ${event.newHeadCommit}, lastCommitAt=$committedAt"
+                        }
+                        updated = true
+                        
+                    } catch (e: org.springframework.orm.ObjectOptimisticLockingFailureException) {
+                        attempt++
+                        if (attempt >= maxRetries) {
+                            log.warn { "[RepoSync] 브랜치 갱신 Optimistic lock 실패: repoId=${event.repositoryId}, ref=$fullRef" }
+                            // 실패해도 계속 진행 (결과적 일관성)
+                            break
+                        }
+                        Thread.sleep(50L * attempt)
+                    }
                 }
             }
         }

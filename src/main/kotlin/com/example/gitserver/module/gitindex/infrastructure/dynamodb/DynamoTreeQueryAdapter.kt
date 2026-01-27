@@ -19,14 +19,19 @@ class DynamoTreeQueryAdapter(
     private val log = KotlinLogging.logger {}
 
     /**
-     * 경로를 정규화합니다.
+     * 경로를 정규화하고 Path Traversal 방어를 적용합니다.
      * - null 또는 빈 문자열은 null로 변환
-     * - 앞뒤 공백 제거
-     * - 앞뒤 슬래시 제거
+     * - Path Traversal 공격 방어
      */
     private fun normalizePath(path: String?): String? {
-        val p = path?.trim()?.trim('/')
-        return if (p.isNullOrEmpty()) null else p
+        if (path.isNullOrBlank()) return null
+        // Path Traversal 방어 적용
+        return try {
+            com.example.gitserver.common.util.PathSecurityUtils.sanitizePath(path)
+        } catch (e: IllegalArgumentException) {
+            log.warn { "[DynamoTreeQuery] 잘못된 경로 무시: $path" }
+            null // 잘못된 경로는 null 반환
+        }
     }
 
     /**

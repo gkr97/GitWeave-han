@@ -7,7 +7,9 @@ import com.example.gitserver.module.repository.application.command.handler.GitRe
 import com.example.gitserver.module.repository.application.query.RepositoryAccessQueryService
 import com.example.gitserver.module.repository.domain.event.GitEventPublisher
 import com.example.gitserver.module.repository.domain.event.SyncBranchEvent
+import com.example.gitserver.module.repository.exception.RepositoryNotFoundException
 import com.example.gitserver.module.repository.infrastructure.persistence.RepositoryRepository
+import com.example.gitserver.module.user.exception.UserNotFoundException
 import com.example.gitserver.module.user.infrastructure.persistence.UserRepository
 import io.swagger.v3.oas.annotations.Operation
 import jakarta.servlet.http.HttpServletRequest
@@ -35,7 +37,7 @@ class JGitHttpController(
 ) {
     private fun resolveUserId(username: String): Long =
         userRepository.findByNameAndIsDeletedFalse(username)?.id
-            ?: throw IllegalArgumentException("존재하지 않는 사용자: $username")
+            ?: throw UserNotFoundException(0L) // username으로 찾을 수 없음
 
     private fun openAuthorizedRepository(
         username: String,
@@ -100,11 +102,11 @@ class JGitHttpController(
     ) {
         val userId = resolveUserId(username)
         val userEntity = userRepository.findByIdAndIsDeletedFalse(userId)
-            ?: throw IllegalArgumentException("존재하지 않는 사용자: $username")
+            ?: throw UserNotFoundException(userId)
         val repository = openAuthorizedRepository(username, repo, request, response) ?: return
 
         val repoEntity = repositoryRepository.findByOwnerIdAndNameAndIsDeletedFalse(userId, repo)
-            ?: throw IllegalArgumentException("Repository not found")
+            ?: throw RepositoryNotFoundException(0L) // repo name으로 찾을 수 없음
         val repositoryId = repoEntity.id
 
         val hook = PostReceiveHook { _, commands ->
