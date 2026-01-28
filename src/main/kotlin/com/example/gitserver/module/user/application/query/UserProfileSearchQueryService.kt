@@ -6,7 +6,7 @@ import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 
 @Service
-class UserSearchQueryService(
+class UserProfileSearchQueryService(
     private val userRepository: UserRepository
 ) {
     /**

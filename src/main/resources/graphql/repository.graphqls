@@ -37,6 +37,8 @@ type Query {
         sortDirection: SortDirection = DESC
         keyword: String
     ): RepositoryListItemConnection!
+
+    userByNickname(nickname: String!): RepositoryUserResponse
 }
 
 interface Node { id: ID! }

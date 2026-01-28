@@ -35,4 +35,20 @@ interface UserRepository: JpaRepository<User, Long> {
         @Param("kw") keyword: String,
         pageable: Pageable
     ): List<User>
+
+    @Query(
+        """
+    SELECT COUNT(u)
+    FROM User u
+    WHERE u.isDeleted = false
+      AND (
+           LOWER(u.name)  LIKE LOWER(CONCAT('%', :kw, '%'))
+        OR LOWER(u.email) LIKE LOWER(CONCAT('%', :kw, '%'))
+      )
+    """
+    )
+    fun countByKeyword(@Param("kw") keyword: String): Long
+
+    fun findByName(nickname: String): User?
+
 }

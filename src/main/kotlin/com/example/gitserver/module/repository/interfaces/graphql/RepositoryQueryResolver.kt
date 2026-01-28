@@ -55,6 +55,30 @@ class RepositoryQueryResolver(
     }
 
     @QueryMapping
+    fun userPublicRepositories(
+        @Argument userId: Long,
+        @Argument first: Int?,
+        @Argument after: String?,
+        @Argument last: Int?,
+        @Argument before: String?,
+        @Argument sortBy: String?,
+        @Argument sortDirection: String?,
+        @Argument keyword: String?
+    ): RepositoryListItemConnection {
+        val paging = KeysetPaging(first = first, after = after, last = last, before = before)
+        PagingValidator.validate(paging)
+
+        return repositoryQueryService.getUserRepositoriesConnection(
+            targetUserId = userId,
+            currentUserId = null,
+            paging = paging,
+            sortBy = sortBy ?: "updatedAt",
+            sortDirection = sortDirection ?: "DESC",
+            keyword = keyword
+        )
+    }
+
+    @QueryMapping
     fun userRepositoriesConnection(
         @Argument userId: Long,
         @Argument first: Int?,

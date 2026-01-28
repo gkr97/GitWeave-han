@@ -3,7 +3,7 @@ package com.example.gitserver.module.user.interfaces.rest
 import com.example.gitserver.common.response.ApiResponse
 import com.example.gitserver.module.repository.interfaces.dto.UserSearchResponse
 import com.example.gitserver.module.user.application.command.service.UserProfileCommandService
-import com.example.gitserver.module.user.application.query.UserSearchQueryService
+import com.example.gitserver.module.user.application.query.UserProfileSearchQueryService
 import com.example.gitserver.module.user.domain.CustomUserDetails
 import com.example.gitserver.module.user.interfaces.dto.UpdateNameRequest
 import com.example.gitserver.module.user.interfaces.dto.UserProfileResponse
@@ -17,7 +17,7 @@ import org.springframework.web.multipart.MultipartFile
 @RequestMapping("/api/v1/users")
 class UserProfileController(
     private val userProfileCommandService: UserProfileCommandService,
-    private val userSearchQueryService: UserSearchQueryService
+    private val userSearchQueryService: UserProfileSearchQueryService
 ) {
 
     /**
