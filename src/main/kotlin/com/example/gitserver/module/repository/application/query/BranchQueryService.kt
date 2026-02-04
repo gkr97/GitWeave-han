@@ -7,6 +7,7 @@ import com.example.gitserver.module.repository.exception.*
 import com.example.gitserver.module.repository.infrastructure.persistence.BranchKeysetRepository
 import com.example.gitserver.module.repository.infrastructure.persistence.RepositoryRepository
 import com.example.gitserver.module.repository.interfaces.dto.*
+import com.example.gitserver.common.cache.RequestCache
 import mu.KotlinLogging
 import org.springframework.cache.annotation.Cacheable
 import org.springframework.stereotype.Service
@@ -18,7 +19,8 @@ import java.time.Instant
 class BranchQueryService(
     private val repositoryRepository: RepositoryRepository,
     private val branchKeysetRepository: BranchKeysetRepository,
-    private val repositoryAccessService: RepositoryAccessService
+    private val repositoryAccessService: RepositoryAccessService,
+    private val requestCache: RequestCache
 ) {
     private val log = KotlinLogging.logger {}
 
@@ -52,8 +54,7 @@ class BranchQueryService(
         }
 
         // 1) 저장소/권한
-        val repo: Repository = repositoryRepository.findByIdAndIsDeletedFalse(repositoryId)
-            ?: throw RepositoryNotFoundException(repositoryId)
+        val repo: Repository = loadRepository(repositoryId)
         repositoryAccessService.checkReadAccessOrThrow(repo, currentUserId)
 
         // 2) 페이징 검증
@@ -126,6 +127,12 @@ class BranchQueryService(
 
         return BranchResponseConnection(edges = edges, pageInfo = pageInfo, totalCount = null)
     }
+
+    private fun loadRepository(repositoryId: Long): Repository =
+        requestCache.getRepo(repositoryId)
+            ?: repositoryRepository.findByIdAndIsDeletedFalse(repositoryId)
+                ?.also { requestCache.putRepo(it) }
+            ?: throw RepositoryNotFoundException(repositoryId)
 
     private fun branchCursorFromRow(row: BranchRow, sort: BranchSortBy, dir: SortDirection): String {
         val payload = when (sort) {

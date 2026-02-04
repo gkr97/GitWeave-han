@@ -1,8 +1,9 @@
 package com.example.gitserver.module.repository.application.command.handler
 
 import com.example.gitserver.module.common.application.service.CommonCodeCacheService
-import com.example.gitserver.module.common.cache.RepoCacheEvictor
-import com.example.gitserver.module.common.cache.registerRepoCacheEvictionAfterCommit
+import com.example.gitserver.common.cache.RepoCacheEvictor
+import com.example.gitserver.common.cache.registerRepoCacheEvictionAfterCommit
+import com.example.gitserver.common.util.LogContext
 import com.example.gitserver.module.repository.domain.Collaborator
 import com.example.gitserver.module.repository.domain.event.*
 import com.example.gitserver.module.repository.domain.policy.RepoAccessPolicy
@@ -65,7 +66,13 @@ class CollaboratorCommandHandler(
               )
         )
 
-        events.publishEvent(CollaboratorInvited(repoId, userIdToInvite))
+        LogContext.with(
+            "eventType" to "COLLAB_INVITED",
+            "repoId" to repoId.toString()
+        ) {
+            log.info { "[Collaborator] invited event published" }
+            events.publishEvent(CollaboratorInvited(repoId, userIdToInvite))
+        }
         registerRepoCacheEvictionAfterCommit(evictor, evictLists = true)
         log.info { "[Collaborator] invited: repoId=$repoId, userId=$userIdToInvite by $requesterId" }
     }
@@ -84,7 +91,13 @@ class CollaboratorCommandHandler(
         if (collab.accepted) throw CollaboratorAlreadyAcceptedException()
 
         collab.accepted = true
-        events.publishEvent(CollaboratorAccepted(repoId, userId))
+        LogContext.with(
+            "eventType" to "COLLAB_ACCEPTED",
+            "repoId" to repoId.toString()
+        ) {
+            log.info { "[Collaborator] accepted event published" }
+            events.publishEvent(CollaboratorAccepted(repoId, userId))
+        }
         registerRepoCacheEvictionAfterCommit(evictor, evictLists = true)
     }
 
@@ -100,7 +113,13 @@ class CollaboratorCommandHandler(
             ?: throw CollaboratorNotFoundException(repoId, userId)
         collaboratorRepository.delete(collab)
 
-        events.publishEvent(CollaboratorRejected(repoId, userId))
+        LogContext.with(
+            "eventType" to "COLLAB_REJECTED",
+            "repoId" to repoId.toString()
+        ) {
+            log.info { "[Collaborator] rejected event published" }
+            events.publishEvent(CollaboratorRejected(repoId, userId))
+        }
         registerRepoCacheEvictionAfterCommit(evictor, evictLists = true)
     }
 
@@ -120,7 +139,13 @@ class CollaboratorCommandHandler(
 
         collaboratorRepository.deleteByRepositoryIdAndUserId(repoId, userId)
 
-        events.publishEvent(CollaboratorRemoved(repoId, userId))
+        LogContext.with(
+            "eventType" to "COLLAB_REMOVED",
+            "repoId" to repoId.toString()
+        ) {
+            log.info { "[Collaborator] removed event published" }
+            events.publishEvent(CollaboratorRemoved(repoId, userId))
+        }
         registerRepoCacheEvictionAfterCommit(evictor, evictLists = true)
     }
 }

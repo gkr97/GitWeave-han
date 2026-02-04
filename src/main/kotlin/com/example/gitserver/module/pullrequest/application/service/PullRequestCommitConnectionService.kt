@@ -1,7 +1,7 @@
 package com.example.gitserver.module.pullrequest.application.service
 
 import com.example.gitserver.common.pagination.*
-import com.example.gitserver.module.gitindex.application.query.CommitQueryService
+import com.example.gitserver.module.gitindex.indexer.application.query.CommitQueryService
 import com.example.gitserver.module.pullrequest.application.query.model.CommitRow
 import com.example.gitserver.module.pullrequest.infrastructure.persistence.PullRequestCommitJdbcRepository
 import com.example.gitserver.module.repository.interfaces.dto.CommitResponse
@@ -68,9 +68,11 @@ class PullRequestCommitConnectionService(
     private data class CommitNode(val node: CommitResponse, val seq: Int)
     private fun CommitNode.toNode() = this
 
-    private fun fetchCommitNodes(repoId: Long, rows: List<CommitRow>): List<CommitNode> =
-        rows.map { r ->
-            val meta = commitQuery.getCommitInfo(repoId, r.commitHash)
+    private fun fetchCommitNodes(repoId: Long, rows: List<CommitRow>): List<CommitNode> {
+        val hashes = rows.map { it.commitHash }
+        val map = commitQuery.getCommitInfoBatch(repoId, hashes)
+        return rows.map { r ->
+            val meta = map[r.commitHash]
                 ?: CommitResponse(
                     hash = r.commitHash,
                     message = "(metadata not indexed)",
@@ -79,6 +81,7 @@ class PullRequestCommitConnectionService(
                 )
             CommitNode(meta, r.seq)
         }
+    }
 
     private fun <T, R> Connection<T>.mapNodes(mapper: (T) -> R): Connection<R> =
         Connection(

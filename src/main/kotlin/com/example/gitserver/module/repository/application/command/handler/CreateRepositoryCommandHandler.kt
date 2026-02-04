@@ -2,47 +2,53 @@ package com.example.gitserver.module.repository.application.command.handler
 
 import com.example.gitserver.common.util.GitRefUtils.toFullRef
 import com.example.gitserver.module.common.application.service.CommonCodeCacheService
-import com.example.gitserver.module.common.cache.RepoCacheEvictor
-import com.example.gitserver.module.common.cache.registerRepoCacheEvictionAfterCommit
-import com.example.gitserver.module.gitindex.application.query.CommitQueryService
-import com.example.gitserver.module.gitindex.domain.event.GitEvent
-import com.example.gitserver.module.gitindex.domain.port.GitRepositoryPort
+import com.example.gitserver.common.cache.RepoCacheEvictor
+import com.example.gitserver.common.cache.registerRepoCacheEvictionAfterCommitForRepo
 import com.example.gitserver.module.repository.application.command.CreateRepositoryCommand
+import com.example.gitserver.module.repository.application.service.RepositoryInitOrchestrator
 import com.example.gitserver.module.repository.domain.Branch
 import com.example.gitserver.module.repository.domain.Collaborator
 import com.example.gitserver.module.repository.domain.Repository
-import com.example.gitserver.module.repository.domain.event.GitEventPublisher
 import com.example.gitserver.module.repository.domain.event.RepositoryCreated
-import com.example.gitserver.module.repository.domain.event.SyncBranchEvent
-import com.example.gitserver.module.repository.application.command.handler.GitRepositorySyncHandler
 import com.example.gitserver.module.repository.exception.*
 import com.example.gitserver.module.repository.infrastructure.persistence.BranchRepository
 import com.example.gitserver.module.repository.infrastructure.persistence.CollaboratorRepository
 import com.example.gitserver.module.repository.infrastructure.persistence.RepositoryRepository
 import com.example.gitserver.module.user.infrastructure.persistence.UserRepository
+import com.example.gitserver.common.util.LogContext
+import com.example.gitserver.module.gitindex.storage.application.routing.RepoPlacementService
+import com.example.gitserver.module.gitindex.storage.infrastructure.persistence.GitNodeRepository
+import com.example.gitserver.module.gitindex.storage.infrastructure.persistence.RepoLocationRepository
+import com.example.gitserver.module.gitindex.storage.infrastructure.persistence.RepoReplicaRepository
+import com.example.gitserver.module.gitindex.storage.domain.RepoReplicaEntity
+import com.example.gitserver.module.gitindex.storage.domain.RepoReplicaId
+import com.example.gitserver.module.gitindex.storage.infrastructure.routing.GitStorageRemoteClient
+import com.example.gitserver.module.gitindex.storage.interfaces.GitStorageInitRequest
 import mu.KotlinLogging
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionSynchronization
 import org.springframework.transaction.support.TransactionSynchronizationManager
-import java.time.ZoneOffset
 
 @Service
 class CreateRepositoryCommandHandler(
     private val repositoryRepository: RepositoryRepository,
-    private val gitRepositoryPort: GitRepositoryPort,
     private val branchRepository: BranchRepository,
-    private val gitEventPublisher: GitEventPublisher,
     private val commonCodeCacheService: CommonCodeCacheService,
     private val collaboratorRepository: CollaboratorRepository,
     private val userRepository: UserRepository,
-    private val commitService: CommitQueryService,
     private val evictor: RepoCacheEvictor,
     private val events: ApplicationEventPublisher,
-    private val gitRepositorySyncHandler: GitRepositorySyncHandler
-
-    ) {
+    private val repositoryInitOrchestrator: RepositoryInitOrchestrator,
+    private val repoPlacementService: RepoPlacementService,
+    private val repoLocationRepository: RepoLocationRepository,
+    private val gitNodeRepository: GitNodeRepository,
+    private val repoReplicaRepository: RepoReplicaRepository,
+    private val gitStorageRemoteClient: GitStorageRemoteClient,
+    @Value("\${git.routing.local-node-id:local}") private val localNodeId: String
+) {
     private val log = KotlinLogging.logger {}
 
     /**
@@ -129,56 +135,50 @@ class CreateRepositoryCommandHandler(
             TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
                 override fun afterCommit() {
                     try {
-                        // Git 초기화는 트랜잭션 외부에서 비동기로 수행
-                        Thread.startVirtualThread {
-                            try {
-                                gitRepositoryPort.initEmptyGitDirectory(
-                                    repository,
-                                    initializeReadme = command.initializeReadme,
-                                    gitignoreTemplate = command.gitignoreTemplate,
-                                    licenseTemplate = command.licenseTemplate
-                                )
-                                log.info { "Git 저장소 초기화 완료: ${repository.name}" }
-                                
-                                // Git 초기화 완료 후 브랜치 HEAD 업데이트
-                                try {
-                                    val headCommitHash = gitRepositoryPort.getHeadCommitHash(repository, defaultBranchFullRef)
-                                    gitRepositorySyncHandler.handle(
-                                        SyncBranchEvent(
-                                            repositoryId = repository.id,
-                                            branchName = command.defaultBranch,
-                                            newHeadCommit = headCommitHash,
-                                            lastCommitAtUtc = null
-                                        ),
-                                        creator = command.owner
-                                    )
-                                    log.info { "브랜치 HEAD 업데이트 완료: ${branch.name}, HEAD=$headCommitHash" }
-                                } catch (syncEx: Exception) {
-                                    log.error(syncEx) { "브랜치 HEAD 업데이트 실패: ${branch.name}" }
-                                }
-                            } catch (ex: Exception) {
-                                log.error(ex) { "Git 저장소 초기화 실패: ${repository.name}, 보상 트랜잭션 수행" }
-                                // 보상 트랜잭션
-                                try {
-                                    repositoryRepository.deleteById(repository.id)
-                                    gitRepositoryPort.deleteGitDirectories(repository)
-                                    log.warn { "저장소 보상 삭제 완료: id=${repository.id}" }
-                                } catch (cleanupEx: Exception) {
-                                    log.error(cleanupEx) { "저장소 보상 삭제 실패: id=${repository.id}" }
+                        repoPlacementService.assignRepository(repository.id)
+                        val location = repoLocationRepository.findById(repository.id).orElse(null)
+                        val primaryNodeId = location?.primaryNodeId ?: localNodeId
+                        val initRequest = GitStorageInitRequest(
+                            repositoryId = repository.id,
+                            defaultBranch = command.defaultBranch,
+                            initializeReadme = command.initializeReadme,
+                            gitignoreTemplate = command.gitignoreTemplate,
+                            licenseTemplate = command.licenseTemplate
+                        )
+
+                        if (primaryNodeId == localNodeId) {
+                            // Git 초기화 + 브랜치 동기화를 별도 오케스트레이터에 위임
+                            repositoryInitOrchestrator.initializeAsync(repository, defaultBranchFullRef, command)
+                        } else {
+                            val primaryNode = gitNodeRepository.findById(primaryNodeId).orElse(null)
+                            val okPrimary = primaryNode?.let { gitStorageRemoteClient.initRepository(it.host, initRequest) } ?: false
+                            if (okPrimary) {
+                                // keep primary as-is
+                            } else {
+                                val fallback = repoPlacementService.selectPrimaryNode(setOf(primaryNodeId))
+                                if (fallback != null && fallback.nodeId != localNodeId) {
+                                    val okFallback = gitStorageRemoteClient.initRepository(fallback.host, initRequest)
+                                    if (okFallback) {
+                                        updatePrimary(location, primaryNodeId, fallback.nodeId)
+                                    } else {
+                                        log.error { "[RepoCreate] remote init failed. fallback local repoId=${repository.id}" }
+                                        updatePrimary(location, primaryNodeId, localNodeId)
+                                        repositoryInitOrchestrator.initializeAsync(repository, defaultBranchFullRef, command)
+                                    }
+                                } else {
+                                    log.error { "[RepoCreate] primary init failed and no remote fallback. local init repoId=${repository.id}" }
+                                    updatePrimary(location, primaryNodeId, localNodeId)
+                                    repositoryInitOrchestrator.initializeAsync(repository, defaultBranchFullRef, command)
                                 }
                             }
                         }
-                        
-                        events.publishEvent(RepositoryCreated(repository.id, repository.owner.id, repository.name))
-                         gitEventPublisher.publish(
-                            GitEvent(
-                                eventType = "REPO_CREATED",
-                                repositoryId = repository.id,
-                                ownerId = repository.owner.id,
-                                name = repository.name,
-                                branch = branch.name
-                            )
-                        )
+
+                        LogContext.with(
+                            "eventType" to "REPO_CREATED",
+                            "repoId" to repository.id.toString()
+                        ) {
+                            events.publishEvent(RepositoryCreated(repository.id, repository.owner.id, repository.name))
+                        }
                         log.info { "저장소 생성 이벤트 발행 완료: repositoryId=${repository.id}" }
                     } catch (e: Exception) {
                         log.error(e) { "저장소 생성 이벤트 발행 실패: repositoryId=${repository.id}" }
@@ -186,7 +186,30 @@ class CreateRepositoryCommandHandler(
                 }
             })
         }
-        registerRepoCacheEvictionAfterCommit(evictor, evictAll = true)
+        registerRepoCacheEvictionAfterCommitForRepo(
+            evictor,
+            repository.id,
+            evictDetailAndBranches = true,
+            evictLists = true
+        )
         return repository
+    }
+
+    private fun updatePrimary(location: com.example.gitserver.module.gitindex.storage.domain.RepoLocationEntity?, oldPrimary: String, newPrimary: String) {
+        val loc = location ?: return
+        if (loc.primaryNodeId == newPrimary) return
+        repoReplicaRepository.deleteByIdRepoIdAndIdNodeId(loc.repoId, newPrimary)
+        if (repoReplicaRepository.findByIdRepoIdAndIdNodeId(loc.repoId, oldPrimary) == null) {
+            repoReplicaRepository.save(
+                RepoReplicaEntity(
+                    id = RepoReplicaId(repoId = loc.repoId, nodeId = oldPrimary),
+                    health = "unknown",
+                    lagMs = null,
+                    lagCommits = null
+                )
+            )
+        }
+        loc.primaryNodeId = newPrimary
+        repoLocationRepository.save(loc)
     }
 }

@@ -2,14 +2,16 @@ package com.example.gitserver.module.repository.application.query
 
 import com.example.gitserver.common.util.GitRefUtils
 import com.example.gitserver.module.common.application.service.CommonCodeCacheService
-import com.example.gitserver.module.gitindex.application.query.FileContentQueryService
-import com.example.gitserver.module.gitindex.application.query.FileTreeQueryService
-import com.example.gitserver.module.gitindex.domain.port.GitRepositoryPort
+import com.example.gitserver.common.cache.RequestCache
+import com.example.gitserver.module.gitindex.indexer.application.query.FileContentQueryService
+import com.example.gitserver.module.gitindex.indexer.application.query.FileTreeQueryService
+import com.example.gitserver.module.gitindex.shared.domain.port.GitRepositoryPort
 import com.example.gitserver.module.repository.exception.*
 import com.example.gitserver.module.repository.infrastructure.persistence.BranchRepository
 import com.example.gitserver.module.repository.infrastructure.persistence.CollaboratorRepository
 import com.example.gitserver.module.repository.infrastructure.persistence.RepositoryRepository
 import com.example.gitserver.module.repository.interfaces.dto.FileContentResponse
+import com.example.gitserver.module.repository.interfaces.dto.FileExplorerResponse
 import com.example.gitserver.module.repository.interfaces.dto.TreeNodeResponse
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
@@ -25,6 +27,7 @@ class RepositoryFileQueryService(
     private val commonCodeCacheService: CommonCodeCacheService,
     private val branchRepository: BranchRepository,
     private val gitRepositoryPort: GitRepositoryPort,
+    private val requestCache: RequestCache,
 ) {
 
     /**
@@ -74,6 +77,30 @@ class RepositoryFileQueryService(
     }
 
     /**
+     * 파일 트리 + 단일 파일 콘텐츠를 한 번에 조회합니다.
+     */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED, readOnly = true)
+    fun getFileExplorer(
+        repositoryId: Long,
+        treePath: String?,
+        filePath: String?,
+        branch: String?,
+        commitHash: String?,
+        userId: Long?
+    ): FileExplorerResponse {
+        checkFileTreePermission(repositoryId, userId)
+
+        val effectiveHash = commitHash ?: resolveLatestCommitHash(repositoryId, branch)
+        val tree = fileTreeQueryService.getFileTree(repositoryId, effectiveHash, treePath, branch)
+        val normalizedPath = filePath?.takeIf { it.isNotBlank() }
+        val content = normalizedPath?.let {
+            fileContentQueryService.getFileContent(repositoryId, effectiveHash, it, branch)
+        }
+
+        return FileExplorerResponse(tree, content)
+    }
+
+    /**
      * branch → 최신 커밋 해시 해소
      * - branch가 null/blank면 저장소의 기본 브랜치 사용
      * - 짧은 이름/풀 레프 모두 허용
@@ -82,13 +109,19 @@ class RepositoryFileQueryService(
      */
     @Transactional(readOnly = true)
     fun resolveLatestCommitHash(repositoryId: Long, branch: String?): String {
-        val repo = repositoryRepository.findByIdWithOwner(repositoryId)
+        val repo = runCatching { requestCache.getRepo(repositoryId) }.getOrNull()
+            ?: repositoryRepository.findByIdWithOwner(repositoryId)
+                ?.also { runCatching { requestCache.putRepo(it) } }
             ?: throw RepositoryNotFoundException(repositoryId)
 
         val short = (branch?.let { GitRefUtils.toShortName(GitRefUtils.toFullRef(it)) } ?: repo.defaultBranch)
         val fullRef = GitRefUtils.toFullRef(short)
 
-        val exists = branchRepository.findByRepositoryIdAndName(repositoryId, fullRef) != null
+        val cachedBranchId = runCatching { requestCache.getBranchId(repositoryId, fullRef, "exists") }.getOrNull()
+        val exists = cachedBranchId != null || branchRepository
+            .findByRepositoryIdAndName(repositoryId, fullRef)
+            ?.id
+            ?.also { runCatching { requestCache.putBranchId(repositoryId, fullRef, it, "exists") } } != null
         if (!exists) {
             throw BranchNotFoundException(repositoryId, fullRef)
         }
@@ -106,7 +139,9 @@ class RepositoryFileQueryService(
      * - 권한 없으면 RepositoryAccessDeniedException
      */
     private fun checkFileTreePermission(repositoryId: Long, userId: Long?) {
-        val repo = repositoryRepository.findByIdWithOwner(repositoryId)
+        val repo = runCatching { requestCache.getRepo(repositoryId) }.getOrNull()
+            ?: repositoryRepository.findByIdWithOwner(repositoryId)
+                ?.also { runCatching { requestCache.putRepo(it) } }
             ?: throw RepositoryNotFoundException(repositoryId)
 
         val visibilityCode = commonCodeCacheService.getCodeDetailsOrLoad("VISIBILITY")
@@ -118,7 +153,9 @@ class RepositoryFileQueryService(
         if (visibility == "PRIVATE") {
             val isOwner = (repo.owner.id == userId)
             val isCollaborator = userId?.let {
-                collaboratorRepository.existsByRepositoryIdAndUserId(repositoryId, it)
+                runCatching { requestCache.getCollabExists(repositoryId, it) }.getOrNull()
+                    ?: collaboratorRepository.existsByRepositoryIdAndUserId(repositoryId, it)
+                        .also { exists -> runCatching { requestCache.putCollabExists(repositoryId, it, exists) } }
             } ?: false
             if (!isOwner && !isCollaborator) {
                 throw RepositoryAccessDeniedException(repositoryId, userId)

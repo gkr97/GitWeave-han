@@ -1,7 +1,7 @@
 package com.example.gitserver.module.pullrequest.infrastructure.support
 
 import com.example.gitserver.module.common.application.service.CommonCodeCacheService
-import com.example.gitserver.module.gitindex.domain.vo.MergeType
+import com.example.gitserver.module.gitindex.shared.domain.vo.MergeType
 import com.example.gitserver.module.pullrequest.domain.CodeBook
 import com.example.gitserver.module.pullrequest.domain.PrMergeType
 import com.example.gitserver.module.pullrequest.domain.PrReviewStatus

@@ -7,11 +7,14 @@ import com.example.gitserver.module.repository.domain.event.RepositoryStarred
 import com.example.gitserver.module.repository.domain.event.RepositoryUnstarred
 import com.example.gitserver.module.repository.domain.event.RepositoryVisibilityChanged
 import com.example.gitserver.module.search.infrastructure.opensearch.RepositorySearchSync
+import com.example.gitserver.common.util.LogContext
 import mu.KotlinLogging
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Component
+import org.springframework.context.annotation.Profile
 
 @Component
+@Profile("gitindexer")
 class RepositorySearchEventListener(
     private val searchSync: RepositorySearchSync
 ) {
@@ -19,38 +22,49 @@ class RepositorySearchEventListener(
 
     @EventListener
     fun onRepositoryCreated(e: RepositoryCreated) {
-        runCatching { searchSync.indexRepositoryById(e.repositoryId) }
-            .onFailure { ex -> log.warn(ex) { "[SearchSync] RepositoryCreated index failed repoId=${e.repositoryId}" } }
+        LogContext.with("eventType" to "REPO_CREATED", "repoId" to e.repositoryId.toString()) {
+            runCatching { searchSync.indexRepositoryById(e.repositoryId) }
+                .onFailure { ex -> log.warn(ex) { "[SearchSync] RepositoryCreated index failed" } }
+        }
     }
 
     @EventListener
     fun onRepositoryRenamed(e: RepositoryRenamed) {
-        runCatching { searchSync.indexRepositoryById(e.repositoryId) }
-            .onFailure { ex -> log.warn(ex) { "[SearchSync] RepositoryRenamed index failed repoId=${e.repositoryId}" } }
+        LogContext.with("eventType" to "REPO_RENAMED", "repoId" to e.repositoryId.toString()) {
+            runCatching { searchSync.indexRepositoryById(e.repositoryId) }
+                .onFailure { ex -> log.warn(ex) { "[SearchSync] RepositoryRenamed index failed" } }
+        }
     }
 
     @EventListener
     fun onRepositoryVisibilityChanged(e: RepositoryVisibilityChanged) {
-        runCatching { searchSync.indexRepositoryById(e.repositoryId) }
-            .onFailure { ex -> log.warn(ex) { "[SearchSync] RepositoryVisibilityChanged index failed repoId=${e.repositoryId}" } }
+        LogContext.with("eventType" to "REPO_VISIBILITY_CHANGED", "repoId" to e.repositoryId.toString()) {
+            runCatching { searchSync.indexRepositoryById(e.repositoryId) }
+                .onFailure { ex -> log.warn(ex) { "[SearchSync] RepositoryVisibilityChanged index failed" } }
+        }
     }
 
     @EventListener
     fun onRepositoryStarred(e: RepositoryStarred) {
-        runCatching { searchSync.indexRepositoryById(e.repositoryId) }
-            .onFailure { ex -> log.warn(ex) { "[SearchSync] RepositoryStarred index failed repoId=${e.repositoryId}" } }
+        LogContext.with("eventType" to "REPO_STARRED", "repoId" to e.repositoryId.toString()) {
+            runCatching { searchSync.indexRepositoryById(e.repositoryId) }
+                .onFailure { ex -> log.warn(ex) { "[SearchSync] RepositoryStarred index failed" } }
+        }
     }
 
     @EventListener
     fun onRepositoryUnstarred(e: RepositoryUnstarred) {
-        runCatching { searchSync.indexRepositoryById(e.repositoryId) }
-            .onFailure { ex -> log.warn(ex) { "[SearchSync] RepositoryUnstarred index failed repoId=${e.repositoryId}" } }
+        LogContext.with("eventType" to "REPO_UNSTARRED", "repoId" to e.repositoryId.toString()) {
+            runCatching { searchSync.indexRepositoryById(e.repositoryId) }
+                .onFailure { ex -> log.warn(ex) { "[SearchSync] RepositoryUnstarred index failed" } }
+        }
     }
 
     @EventListener
     fun onRepositoryDeleted(e: RepositoryDeleted) {
-        runCatching { searchSync.deleteRepositoryById(e.repositoryId) }
-            .onFailure { ex -> log.warn(ex) { "[SearchSync] RepositoryDeleted delete failed repoId=${e.repositoryId}" } }
+        LogContext.with("eventType" to "REPO_DELETED", "repoId" to e.repositoryId.toString()) {
+            runCatching { searchSync.deleteRepositoryById(e.repositoryId) }
+                .onFailure { ex -> log.warn(ex) { "[SearchSync] RepositoryDeleted delete failed" } }
+        }
     }
 }
-

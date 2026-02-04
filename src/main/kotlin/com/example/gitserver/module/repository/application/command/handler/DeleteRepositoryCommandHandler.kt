@@ -6,6 +6,7 @@ import com.example.gitserver.module.repository.domain.policy.RepoAccessPolicy
 import com.example.gitserver.module.repository.exception.RepositoryNotFoundException
 import com.example.gitserver.module.repository.infrastructure.persistence.RepositoryRepository
 import com.example.gitserver.module.user.infrastructure.persistence.UserRepository
+import com.example.gitserver.common.util.LogContext
 import mu.KotlinLogging
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
@@ -53,7 +54,13 @@ class DeleteRepositoryCommandHandler(
         repo.updatedAt = LocalDateTime.now()
         repositoryRepository.save(repo)
 
-        events.publishEvent(RepositoryDeleted(repo.id))
+        LogContext.with(
+            "eventType" to "REPO_DELETED",
+            "repoId" to repo.id.toString()
+        ) {
+            log.info { "[Repo-Delete] delete event published" }
+            events.publishEvent(RepositoryDeleted(repo.id))
+        }
 
         log.info { "[Repo-Delete] 완료: repoId=${repo.id}, by=${user.id}" }
     }

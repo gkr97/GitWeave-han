@@ -1,13 +1,15 @@
 package com.example.gitserver.config.graphql
 
-import com.example.gitserver.module.gitindex.application.query.CommitQueryService
+import com.example.gitserver.module.gitindex.indexer.application.query.CommitQueryService
 import com.example.gitserver.module.repository.interfaces.dto.CommitResponse
+import com.example.gitserver.common.util.LogContext
 import org.dataloader.DataLoader
 import org.dataloader.DataLoaderFactory
 import org.dataloader.MappedBatchLoaderWithContext
 import org.dataloader.DataLoaderOptions
 import org.springframework.stereotype.Component
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ForkJoinPool
 
 /**
  * Key: (repositoryId, ref or fullRef)
@@ -24,7 +26,7 @@ class CommitByRefDataLoaderFactory(
     fun create(): DataLoader<RefKey, CommitResponse?> {
         val batchLoader = MappedBatchLoaderWithContext<RefKey, CommitResponse?> { keys, _ ->
             log.info { "CommitByRefDataLoader: batch load keys=${keys.joinToString()}" }
-            CompletableFuture.supplyAsync {
+            CompletableFuture.supplyAsync({
                 val byRepo = keys.groupBy { it.repositoryId }
                 val result = HashMap<RefKey, CommitResponse?>(keys.size)
 
@@ -35,7 +37,7 @@ class CommitByRefDataLoaderFactory(
                     group.forEach { k -> result[k] = map[k.ref] }
                 }
                 result
-            }
+            }, LogContext.wrappingExecutor(ForkJoinPool.commonPool()))
         }
 
         val options = DataLoaderOptions.newOptions()

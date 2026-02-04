@@ -5,6 +5,7 @@ import com.example.gitserver.module.user.exception.UserLoginException
 import com.example.gitserver.module.user.domain.User
 import com.example.gitserver.module.user.domain.event.UserLoginEvent
 import com.example.gitserver.module.user.infrastructure.persistence.UserRepository
+import com.example.gitserver.common.util.LogContext
 import mu.KotlinLogging
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.support.MessageSourceAccessor
@@ -59,15 +60,20 @@ class LoginUserCommandHandler(
 
         log.info { "로그인 성공: ${command.email}" }
 
-        eventPublisher.publishEvent(
-            UserLoginEvent(
-                userId = user.id,
-                ipAddress = ipAddress,
-                userAgent = userAgent,
-                loginAt = LocalDateTime.now(),
-                success = true
+        LogContext.with(
+            "eventType" to "USER_LOGIN",
+            "userId" to user.id.toString()
+        ) {
+            eventPublisher.publishEvent(
+                UserLoginEvent(
+                    userId = user.id,
+                    ipAddress = ipAddress,
+                    userAgent = userAgent,
+                    loginAt = LocalDateTime.now(),
+                    success = true
+                )
             )
-        )
+        }
 
         return user
     }

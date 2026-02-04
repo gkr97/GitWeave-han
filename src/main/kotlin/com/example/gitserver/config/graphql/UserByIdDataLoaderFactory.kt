@@ -2,12 +2,14 @@ package com.example.gitserver.config.graphql
 
 import com.example.gitserver.module.repository.interfaces.dto.RepositoryUserResponse
 import com.example.gitserver.module.user.infrastructure.persistence.UserRepository
+import com.example.gitserver.common.util.LogContext
 import org.dataloader.DataLoader
 import org.dataloader.DataLoaderFactory
 import org.dataloader.DataLoaderOptions
 import org.dataloader.MappedBatchLoaderWithContext
 import org.springframework.stereotype.Component
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ForkJoinPool
 
 
 /**
@@ -24,7 +26,7 @@ class UserByIdDataLoaderFactory(
     fun create(): DataLoader<Long, RepositoryUserResponse> {
         val batchLoader = MappedBatchLoaderWithContext<Long, RepositoryUserResponse> { keys, _ ->
             log.info { "UserByIdDataLoader: batch load user ids=${keys.joinToString()}" }
-            CompletableFuture.supplyAsync {
+            CompletableFuture.supplyAsync({
                 val users = userRepository.findAllById(keys).toList()
                 users.associateBy({ it.id }) { u ->
                     RepositoryUserResponse(
@@ -33,7 +35,7 @@ class UserByIdDataLoaderFactory(
                         profileImageUrl = u.profileImageUrl
                     )
                 }
-            }
+            }, LogContext.wrappingExecutor(ForkJoinPool.commonPool()))
         }
 
         val options = DataLoaderOptions.newOptions()

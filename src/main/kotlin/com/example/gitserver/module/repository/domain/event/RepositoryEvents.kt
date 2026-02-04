@@ -25,3 +25,13 @@ data class RepositoryCreated(val repositoryId: Long, val ownerId: Long, val name
 data class RepositoryRenamed(val repositoryId: Long, val oldName: String, val newName: String)
 
 data class RepositoryDeleted(val repositoryId: Long)
+
+data class RepositoryPushed(
+    val repositoryId: Long,
+    val ownerId: Long,
+    val name: String,
+    val branch: String,
+    val oldrev: String,
+    val newrev: String,
+    val actorId: Long? = null
+)

@@ -1,7 +1,7 @@
 package com.example.gitserver.module.pullrequest.application.service
 
-import com.example.gitserver.module.gitindex.domain.port.GitLogPort
-import com.example.gitserver.module.gitindex.infrastructure.git.GitPathResolver
+import com.example.gitserver.module.gitindex.shared.domain.port.GitLogPort
+import com.example.gitserver.module.gitindex.storage.infrastructure.git.GitPathResolver
 import com.example.gitserver.module.pullrequest.domain.PullRequestCommit
 import com.example.gitserver.module.pullrequest.infrastructure.persistence.PullRequestCommitRepository
 import com.example.gitserver.module.pullrequest.infrastructure.persistence.PullRequestRepository

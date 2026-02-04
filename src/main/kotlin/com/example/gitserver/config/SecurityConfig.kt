@@ -25,7 +25,8 @@ class SecurityConfig(
     private val jwtProvider: JwtProvider,
     private val userDetailsService: CustomUserDetailsService,
 
-    private val gitPatAuthenticationFilter: GitPatAuthenticationFilter
+    private val gitPatAuthenticationFilter: GitPatAuthenticationFilter,
+    private val internalGitApiKeyFilter: InternalGitApiKeyFilter
 ) {
 
     @Bean
@@ -53,6 +54,9 @@ class SecurityConfig(
                         "/{ownerId}/{repo}.git/**",
                         "/api/v1/repositories/*/download",
                         "/actuator/health",
+                        "/internal/git/route",
+                        "/internal/git/routing/**",
+                        "/internal/git/storage/**",
                         "/error"
                     ).permitAll()
                     .anyRequest().authenticated()
@@ -68,6 +72,7 @@ class SecurityConfig(
                     }
             }
             .addFilterBefore(WebAsyncManagerIntegrationFilter(), UsernamePasswordAuthenticationFilter::class.java)
+            .addFilterBefore(internalGitApiKeyFilter, UsernamePasswordAuthenticationFilter::class.java)
             .addFilterBefore(gitPatAuthenticationFilter, UsernamePasswordAuthenticationFilter::class.java)
             .addFilterBefore(jwtAuthenticationFilter(), UsernamePasswordAuthenticationFilter::class.java)
 

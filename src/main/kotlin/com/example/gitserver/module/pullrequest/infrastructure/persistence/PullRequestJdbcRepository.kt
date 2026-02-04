@@ -110,6 +110,31 @@ class PullRequestJdbcRepository(
         return content to total
     }
 
+    fun count(
+        repositoryId: Long,
+        keyword: String?,
+        status: String?
+    ): Int {
+        val params = mutableMapOf<String, Any?>("repoId" to repositoryId)
+        if (!keyword.isNullOrBlank()) {
+            params["kw"] = "%${keyword.lowercase()}%"
+        }
+        if (!status.isNullOrBlank()) {
+            params["status"] = status.lowercase()
+        }
+
+        return jdbc.queryForObject(
+            """
+            SELECT COUNT(*) FROM pull_request pr
+            LEFT JOIN common_code_detail c ON c.id = pr.status_code_id
+            WHERE pr.repository_id = :repoId
+              ${if (keyword.isNullOrBlank()) "" else "AND (LOWER(pr.title) LIKE :kw OR LOWER(COALESCE(pr.description,'')) LIKE :kw)"}
+              ${if (status.isNullOrBlank()) "" else "AND c.code = :status"}
+            """.trimIndent(),
+            params, Int::class.java
+        ) ?: 0
+    }
+
     fun queryDetail(repositoryId: Long, prId: Long): PullRequestDetail? =
         jdbc.query(
             """

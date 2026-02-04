@@ -1,8 +1,8 @@
 package com.example.gitserver.config
 
 import com.example.gitserver.common.util.JacksonListRedisSerializer
-import com.example.gitserver.module.gitindex.domain.dto.FileMeta
-import com.example.gitserver.module.gitindex.domain.dto.TreeItem
+import com.example.gitserver.module.gitindex.shared.domain.dto.FileMeta
+import com.example.gitserver.module.gitindex.shared.domain.dto.TreeItem
 import com.example.gitserver.module.repository.interfaces.dto.CommitResponse
 import com.example.gitserver.module.repository.interfaces.dto.TreeNodeResponse
 import com.fasterxml.jackson.annotation.JsonTypeInfo

@@ -1,7 +1,8 @@
 package com.example.gitserver.module.pullrequest.infrastructure.support
 
 import com.example.gitserver.common.util.GitRefUtils
-import com.example.gitserver.module.gitindex.domain.port.GitRepositoryPort
+import com.example.gitserver.common.cache.RequestCache
+import com.example.gitserver.module.gitindex.shared.domain.port.GitRepositoryPort
 import com.example.gitserver.module.pullrequest.domain.GitRepoPolicy
 import com.example.gitserver.module.repository.infrastructure.persistence.BranchRepository
 import com.example.gitserver.module.repository.infrastructure.persistence.CollaboratorRepository
@@ -13,7 +14,8 @@ class GitRepoPolicyAdapter(
     private val repoRepo: RepositoryRepository,
     private val collabRepo: CollaboratorRepository,
     private val branchRepo: BranchRepository,
-    private val git: GitRepositoryPort
+    private val git: GitRepositoryPort,
+    private val requestCache: RequestCache,
 ) : GitRepoPolicy {
 
     /**
@@ -29,7 +31,10 @@ class GitRepoPolicyAdapter(
      */
     override fun branchExists(repositoryId: Long, fullRef: String): Boolean {
         val ref = GitRefUtils.toFullRef(fullRef)
-        return branchRepo.findByRepositoryIdAndName(repositoryId, ref) != null
+        val cached = runCatching { requestCache.getBranchId(repositoryId, ref, "exists") }.getOrNull()
+        return cached != null || branchRepo.findByRepositoryIdAndName(repositoryId, ref)
+            ?.id
+            ?.also { runCatching { requestCache.putBranchId(repositoryId, ref, it, "exists") } } != null
     }
 
     /**

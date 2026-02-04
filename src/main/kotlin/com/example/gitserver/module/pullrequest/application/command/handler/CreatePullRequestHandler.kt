@@ -13,6 +13,7 @@ import com.example.gitserver.module.repository.exception.RepositoryNotFoundExcep
 import com.example.gitserver.module.repository.exception.UserNotFoundException
 import com.example.gitserver.module.repository.infrastructure.persistence.RepositoryRepository
 import com.example.gitserver.module.user.infrastructure.persistence.UserRepository
+import com.example.gitserver.common.util.LogContext
 import mu.KotlinLogging
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
@@ -74,7 +75,13 @@ class CreatePullRequestHandler(
         val saved = pullRequestRepository.save(pr)
         log.info { "[PR][Create] id=${saved.id} repo=${repo.id} $sourceFull -> $targetFull base=$base head=$head" }
 
-        events.publishEvent(PullRequestCreated(saved.id, repo.id, base, head))
+        LogContext.with(
+            "eventType" to "PR_CREATED",
+            "repoId" to repo.id.toString(),
+            "prId" to saved.id.toString()
+        ) {
+            events.publishEvent(PullRequestCreated(saved.id, repo.id, base, head))
+        }
         return saved.id
     }
 }

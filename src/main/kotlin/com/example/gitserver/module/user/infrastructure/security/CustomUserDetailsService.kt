@@ -1,7 +1,9 @@
 package com.example.gitserver.module.user.infrastructure.security
 
 import com.example.gitserver.module.user.domain.CustomUserDetails
+import com.example.gitserver.common.cache.RequestCache
 import com.example.gitserver.module.user.infrastructure.persistence.UserRepository
+import org.springframework.cache.annotation.Cacheable
 import org.springframework.security.core.userdetails.UserDetails
 import org.springframework.security.core.userdetails.UserDetailsService
 import org.springframework.security.core.userdetails.UsernameNotFoundException
@@ -9,7 +11,8 @@ import org.springframework.stereotype.Service
 
 @Service
 class CustomUserDetailsService(
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val requestCache: RequestCache,
 ) : UserDetailsService {
     /**
      * 사용자 이름으로 UserDetails를 로드합니다.
@@ -29,9 +32,12 @@ class CustomUserDetailsService(
      * @return UserDetails 객체
      * @throws UsernameNotFoundException 사용자를 찾을 수 없는 경우
      */
+    @Cacheable(cacheNames = ["userDetailsByIdShort"], key = "#userId", unless = "#result == null")
     fun loadUserById(userId: Long): UserDetails {
-        val user = userRepository.findById(userId)
+        val cached = runCatching { requestCache.getUser(userId) }.getOrNull()
+        val user = cached ?: userRepository.findById(userId)
             .orElseThrow { UsernameNotFoundException("사용자를 찾을 수 없습니다") }
+            .also { runCatching { requestCache.putUser(it) } }
         return CustomUserDetails(user)
     }
 }

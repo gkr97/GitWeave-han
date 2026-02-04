@@ -5,7 +5,8 @@ import com.example.gitserver.module.pullrequest.domain.CodeBook
 import com.example.gitserver.module.pullrequest.domain.PrStatus
 import com.example.gitserver.module.pullrequest.domain.event.PullRequestHeadSynced
 import com.example.gitserver.module.pullrequest.infrastructure.persistence.PullRequestRepository
-import com.example.gitserver.module.gitindex.domain.event.GitEvent
+import com.example.gitserver.module.gitindex.shared.domain.event.GitEvent
+import com.example.gitserver.common.util.LogContext
 import mu.KotlinLogging
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
@@ -43,7 +44,14 @@ class PullRequestHeadUpdateOnPushHandler(
             pullRequestRepository.save(pr)
 
             log.info { "[PR][HeadSync] pr=${pr.id} repo=$repoId head $oldHead -> $newHead" }
-            events.publishEvent(PullRequestHeadSynced(pr.id, repoId, pr.baseCommitHash, newHead))
+            LogContext.with(
+                "eventType" to "PR_HEAD_SYNCED",
+                "repoId" to repoId.toString(),
+                "prId" to pr.id.toString(),
+                "branch" to ref
+            ) {
+                events.publishEvent(PullRequestHeadSynced(pr.id, repoId, pr.baseCommitHash, newHead))
+            }
         }
     }
 }

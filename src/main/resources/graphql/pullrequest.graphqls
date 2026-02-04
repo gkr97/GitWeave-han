@@ -1,52 +1,27 @@
-extend type Query {
-    repositoryPullRequests(
-        repositoryId: Long!
-        page: Int
-        size: Int
-        keyword: String
+extend type RepositoryResponse {
+    pullRequestsConnection(
+        first: Int
+        after: String
+        last: Int
+        before: String
         status: String
+        keyword: String
         sort: String
         direction: String
-    ): PullRequestListConnection!
+    ): PullRequestListItemConnection!
 
-    repositoryPullRequest(
-        repositoryId: Long!
-        prId: Long!
-    ): PullRequestDetail
-
-    repositoryPullRequestFiles(prId: Long!): [PullRequestFileItem!]!
-    repositoryPullRequestDiffs(prId: Long!): [PullRequestFileDiffItem!]!
-
-    repositoryPullRequestReviewers(prId: Long!): [PullRequestReviewerNode!]!
-    repositoryPullRequestReviewSummary(prId: Long!): PullRequestReviewSummary!
-
-    repositoryPullRequestMergeCheck(prId: Long!): MergeCheckResult!
-
-    repositoryPullRequestFileDiff(
-        repositoryId: Long!
-        prId: Long!
-        filePath: String!
-    ): FileDiffResponse!
+    pullRequest(prId: Long!): PullRequestDetail
 }
 
-type CommitResponseConnection {
-    edges: [CommitResponseEdge!]!
+type PullRequestListItemConnection {
+    edges: [PullRequestListItemEdge!]!
     pageInfo: PageInfo!
     totalCount: Int
 }
 
-type CommitResponseEdge {
+type PullRequestListItemEdge {
     cursor: String!
-    node: CommitResponse!
-}
-
-type PullRequestListConnection {
-    content: [PullRequestListItem!]!
-    page: Int!
-    size: Int!
-    totalElements: Int!
-    totalPages: Int!
-    hasNext: Boolean!
+    node: PullRequestListItem!
 }
 
 type PullRequestListItem {
@@ -81,6 +56,25 @@ type PullRequestDetail {
         last: Int
         before: String
     ): CommitResponseConnection!
+
+    files: [PullRequestFileItem!]!
+    diffs: [PullRequestFileDiffItem!]!
+    fileDiff(filePath: String!, forceFull: Boolean): FileDiffResponse!
+
+    reviewers: [PullRequestReviewerNode!]!
+    reviewSummary: PullRequestReviewSummary!
+    mergeCheck: MergeCheckResult!
+}
+
+type CommitResponseConnection {
+    edges: [CommitResponseEdge!]!
+    pageInfo: PageInfo!
+    totalCount: Int
+}
+
+type CommitResponseEdge {
+    cursor: String!
+    node: CommitResponse!
 }
 
 type PullRequestFileItem {

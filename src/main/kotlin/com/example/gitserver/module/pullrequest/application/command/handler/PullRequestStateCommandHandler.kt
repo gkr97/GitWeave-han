@@ -7,19 +7,19 @@ import com.example.gitserver.module.pullrequest.domain.PrMergeType
 import com.example.gitserver.module.pullrequest.domain.PrStatus
 import com.example.gitserver.module.pullrequest.domain.PullRequestMergeLog
 import com.example.gitserver.module.pullrequest.domain.CodeBook
+import com.example.gitserver.module.pullrequest.domain.policy.PullRequestAccessPolicy
 import com.example.gitserver.module.pullrequest.infrastructure.persistence.PullRequestMergeLogRepository
 import com.example.gitserver.module.pullrequest.infrastructure.persistence.PullRequestRepository
 import com.example.gitserver.module.repository.application.command.handler.GitRepositorySyncHandler
-import com.example.gitserver.module.repository.domain.event.GitEventPublisher
+import com.example.gitserver.module.repository.domain.event.RepositoryPushed
 import com.example.gitserver.module.repository.domain.event.SyncBranchEvent
 import com.example.gitserver.module.repository.exception.RepositoryNotFoundException
-import com.example.gitserver.module.repository.infrastructure.persistence.CollaboratorRepository
 import com.example.gitserver.module.repository.infrastructure.persistence.RepositoryRepository
 import com.example.gitserver.module.user.infrastructure.persistence.UserRepository
-import com.example.gitserver.module.gitindex.domain.dto.MergeRequest
-import com.example.gitserver.module.gitindex.domain.event.GitEvent
-import com.example.gitserver.module.gitindex.domain.port.GitRepositoryPort
-import com.example.gitserver.module.gitindex.infrastructure.redis.GitIndexEvictor
+import com.example.gitserver.module.gitindex.shared.domain.dto.MergeRequest
+import com.example.gitserver.module.gitindex.shared.domain.port.GitRepositoryPort
+import com.example.gitserver.module.gitindex.indexer.infrastructure.redis.GitIndexEvictor
+import com.example.gitserver.common.util.LogContext
 import com.example.gitserver.module.pullrequest.domain.PullRequest
 import com.example.gitserver.module.pullrequest.exception.*
 import com.example.gitserver.module.repository.domain.Repository
@@ -27,6 +27,7 @@ import com.example.gitserver.module.user.domain.User
 import com.example.gitserver.module.pullrequest.exception.PullRequestNotFoundException
 import com.example.gitserver.module.user.exception.UserNotFoundException
 import mu.KotlinLogging
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -35,7 +36,6 @@ import java.time.LocalDateTime
 @Service
 class PullRequestStateCommandHandler(
     private val repositoryRepository: RepositoryRepository,
-    private val collaboratorRepository: CollaboratorRepository,
     private val userRepository: UserRepository,
     private val pullRequestRepository: PullRequestRepository,
     private val mergeLogRepository: PullRequestMergeLogRepository,
@@ -43,8 +43,9 @@ class PullRequestStateCommandHandler(
     private val reviewCommandHandler: PullRequestReviewCommandHandler,
     private val gitRepositoryPort: GitRepositoryPort,
     private val gitRepositorySyncHandler: GitRepositorySyncHandler,
-    private val gitEventPublisher: GitEventPublisher,
     private val gitIndexEvictor: GitIndexEvictor,
+    private val events: ApplicationEventPublisher,
+    private val accessPolicy: PullRequestAccessPolicy,
 ) {
     private val log = KotlinLogging.logger {}
 
@@ -54,19 +55,12 @@ class PullRequestStateCommandHandler(
 
     /** repoId/userId/authorId 중 하나라도 권한 충족(소유자/협업자/작성자) */
     private fun ensurePerm(repoId: Long, userId: Long, alsoAuthorId: Long? = null) {
-        val repo = repositoryRepository.findByIdAndIsDeletedFalse(repoId) ?: throw RepositoryNotFoundException(repoId)
-        val owner = repo.owner.id == userId
-        val collab = collaboratorRepository.existsByRepositoryIdAndUserId(repoId, userId)
-        val authorOk = alsoAuthorId?.let { it == userId } ?: false
-        if (!(owner || collab || authorOk)) throw PermissionDenied()
+        if (!accessPolicy.canAct(repoId, userId, alsoAuthorId)) throw PermissionDenied()
     }
 
     /** 소유자/협업자만 허용(머지 등) */
     private fun ensureMaintainerPerm(repoId: Long, userId: Long) {
-        val repo = repositoryRepository.findByIdAndIsDeletedFalse(repoId) ?: throw RepositoryNotFoundException(repoId)
-        val owner = repo.owner.id == userId
-        val collab = collaboratorRepository.existsByRepositoryIdAndUserId(repoId, userId)
-        if (!(owner || collab)) throw PermissionDenied()
+        if (!accessPolicy.canMaintain(repoId, userId)) throw PermissionDenied()
     }
 
     /** PR이 OPEN 상태인지 확인 */
@@ -229,17 +223,25 @@ class PullRequestStateCommandHandler(
             ),
             creator = requester
         )
-        gitEventPublisher.publish(
-            GitEvent(
-                eventType = "PUSH",
+        LogContext.with(
+            "eventType" to "PUSH",
+            "repoId" to repo.id.toString(),
+            "branch" to targetRef,
+            "prId" to pr.id.toString()
+        ) {
+            log.info { "[PR][Merge] push event published" }
+            events.publishEvent(
+            RepositoryPushed(
                 repositoryId = repo.id,
                 ownerId = repo.owner.id,
                 name = repo.name,
                 branch = targetRef,
                 oldrev = oldHead ?: EMPTY_SHA1,
-                newrev = newHead
+                newrev = newHead,
+                actorId = requester.id
             )
         )
+        }
         gitIndexEvictor.evictAllOfRepository(repo.id)
 
         // 상태/머지 타입 저장

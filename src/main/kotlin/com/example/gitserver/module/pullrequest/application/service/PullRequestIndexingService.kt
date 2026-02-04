@@ -1,11 +1,11 @@
 package com.example.gitserver.module.pullrequest.application.service
 
 import com.example.gitserver.module.common.application.service.CommonCodeCacheService
-import com.example.gitserver.module.gitindex.domain.port.GitDiffPort
+import com.example.gitserver.module.gitindex.shared.domain.port.GitDiffPort
 import com.example.gitserver.module.pullrequest.application.query.model.PullRequestFileRow
 import com.example.gitserver.module.pullrequest.infrastructure.persistence.PullRequestFileJdbcIndexRepository
 import com.example.gitserver.module.pullrequest.infrastructure.persistence.PullRequestRepository
-import com.example.gitserver.module.gitindex.infrastructure.git.GitPathResolver
+import com.example.gitserver.module.gitindex.storage.infrastructure.git.GitPathResolver
 import com.example.gitserver.module.pullrequest.exception.PullRequestNotFoundException
 import mu.KotlinLogging
 import org.springframework.stereotype.Service

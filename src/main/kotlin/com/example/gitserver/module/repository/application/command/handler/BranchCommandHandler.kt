@@ -3,9 +3,9 @@ package com.example.gitserver.module.repository.application.command.handler
 import com.example.gitserver.module.repository.application.command.CreateBranchCommand
 import com.example.gitserver.module.repository.application.command.DeleteBranchCommand
 import com.example.gitserver.common.util.GitRefUtils
-import com.example.gitserver.module.common.cache.RepoCacheEvictor
-import com.example.gitserver.module.common.cache.registerRepoCacheEvictionAfterCommit
-import com.example.gitserver.module.gitindex.domain.port.GitRepositoryPort
+import com.example.gitserver.common.cache.RepoCacheEvictor
+import com.example.gitserver.common.cache.registerRepoCacheEvictionAfterCommit
+import com.example.gitserver.module.gitindex.shared.domain.port.GitRepositoryPort
 import com.example.gitserver.module.repository.domain.Branch
 import com.example.gitserver.module.repository.domain.event.BranchCreated
 import com.example.gitserver.module.repository.domain.event.BranchDeleted
@@ -13,6 +13,8 @@ import com.example.gitserver.module.repository.domain.policy.RepoAccessPolicy
 import com.example.gitserver.module.repository.exception.*
 import com.example.gitserver.module.repository.infrastructure.persistence.BranchRepository
 import com.example.gitserver.module.repository.infrastructure.persistence.RepositoryRepository
+import com.example.gitserver.common.util.LogContext
+import mu.KotlinLogging
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -26,6 +28,7 @@ class BranchCommandHandler(
     private val access: RepoAccessPolicy,
     private val events: ApplicationEventPublisher
 ) {
+    private val log = KotlinLogging.logger {}
 
     /**
      * 저장소 브랜치를 삭제합니다.
@@ -65,7 +68,14 @@ class BranchCommandHandler(
         branchRepository.delete(branch)
 
         // 3) 이벤트 발행
-        events.publishEvent(BranchDeleted(repo.id, fullRef))
+        LogContext.with(
+            "eventType" to "BRANCH_DELETED",
+            "repoId" to repo.id.toString(),
+            "branch" to fullRef
+        ) {
+            log.info { "[Branch] deleted event published" }
+            events.publishEvent(BranchDeleted(repo.id, fullRef))
+        }
 
         registerRepoCacheEvictionAfterCommit(
             evictor,
@@ -121,7 +131,14 @@ class BranchCommandHandler(
         val savedBranch = branchRepository.save(newBranch)
 
         // 3) 이벤트 발행
-        events.publishEvent(BranchCreated(repo.id, fullRef, newBranch.headCommitHash))
+        LogContext.with(
+            "eventType" to "BRANCH_CREATED",
+            "repoId" to repo.id.toString(),
+            "branch" to fullRef
+        ) {
+            log.info { "[Branch] created event published" }
+            events.publishEvent(BranchCreated(repo.id, fullRef, newBranch.headCommitHash))
+        }
 
         registerRepoCacheEvictionAfterCommit(
             evictor,

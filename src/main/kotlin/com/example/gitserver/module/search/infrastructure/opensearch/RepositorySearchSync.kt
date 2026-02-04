@@ -16,9 +16,11 @@ import org.opensearch.client.opensearch.core.DeleteRequest
 import org.opensearch.client.opensearch.core.IndexRequest
 import org.opensearch.client.opensearch.core.bulk.BulkOperation
 import org.springframework.stereotype.Component
+import org.springframework.context.annotation.Profile
 import java.time.ZoneOffset
 
 @Component
+@Profile("gitindexer")
 class RepositorySearchSync(
     private val osClient: OpenSearchClient,
     private val topicRepo: RepositoryTopicRepository,

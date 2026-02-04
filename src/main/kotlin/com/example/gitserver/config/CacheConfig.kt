@@ -72,6 +72,20 @@ class CacheConfig {
                     .maximumSize(100_000)
                     .expireAfterWrite(Duration.ofHours(1))
                     .build()
+            ),
+            CaffeineCache(
+                "userByIdShort",
+                Caffeine.newBuilder()
+                    .maximumSize(100_000)
+                    .expireAfterWrite(Duration.ofSeconds(60))
+                    .build()
+            ),
+            CaffeineCache(
+                "userDetailsByIdShort",
+                Caffeine.newBuilder()
+                    .maximumSize(100_000)
+                    .expireAfterWrite(Duration.ofSeconds(60))
+                    .build()
             )
         )
 

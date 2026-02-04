@@ -7,12 +7,11 @@ import com.example.gitserver.module.repository.application.query.model.Repositor
 import com.example.gitserver.module.repository.interfaces.dto.*
 import com.example.gitserver.module.user.domain.CustomUserDetails
 import com.example.gitserver.module.user.exception.UserLoginException
+import graphql.schema.DataFetchingEnvironment
+import org.springframework.graphql.data.method.annotation.ContextValue
 import org.springframework.graphql.data.method.annotation.Argument
 import org.springframework.graphql.data.method.annotation.QueryMapping
-import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.stereotype.Controller
-import org.springframework.validation.BeanPropertyBindingResult
-import org.springframework.validation.BindException
 import org.springframework.validation.Validator
 
 @Controller
@@ -24,13 +23,17 @@ class RepositoryQueryResolver(
     fun repository(
         @Argument id: Long,
         @Argument branch: String?,
-        @AuthenticationPrincipal user: CustomUserDetails?
-    ): RepoDetailResponse =
-        repositoryQueryService.getRepository(id, branch, user?.getUserId())
+        @ContextValue(name = "currentUser", required = false) user: CustomUserDetails?,
+        env: DataFetchingEnvironment
+    ): RepoDetailResponse {
+        val repo = repositoryQueryService.getRepository(id, branch, user?.getUserId())
+        env.graphQlContext.put("repoDetail", repo)
+        return repo
+    }
 
     @QueryMapping
     fun myRepositoriesConnection(
-        @AuthenticationPrincipal user: CustomUserDetails?,
+        @ContextValue(name = "currentUser", required = false) user: CustomUserDetails?,
         @Argument first: Int?,
         @Argument after: String?,
         @Argument last: Int?,
@@ -39,14 +42,14 @@ class RepositoryQueryResolver(
         @Argument sortDirection: String?,
         @Argument keyword: String?
     ): RepositoryListItemConnection {
-        val userId = user?.getUserId()
+        val currentUserId = user?.getUserId()
             ?: throw UserLoginException("USER_NOT_LOGGED_IN", "사용자가 로그인하지 않았습니다.")
 
         val paging = KeysetPaging(first = first, after = after, last = last, before = before)
         PagingValidator.validate(paging)
 
         return repositoryQueryService.getMyRepositoriesConnection(
-            currentUserId = userId,
+            currentUserId = currentUserId,
             paging = paging,
             sortBy = sortBy ?: "updatedAt",
             sortDirection = sortDirection ?: "DESC",
@@ -88,10 +91,9 @@ class RepositoryQueryResolver(
         @Argument sortBy: String?,
         @Argument sortDirection: String?,
         @Argument keyword: String?,
-        @AuthenticationPrincipal user: CustomUserDetails?
+        @ContextValue(name = "currentUser", required = false) user: CustomUserDetails?
     ): RepositoryListItemConnection {
         val currentUserId = user?.getUserId()
-
         val paging = KeysetPaging(first = first, after = after, last = last, before = before)
         PagingValidator.validate(paging)
 

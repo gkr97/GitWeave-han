@@ -16,6 +16,7 @@ import com.example.gitserver.module.repository.infrastructure.persistence.Collab
 import com.example.gitserver.module.repository.infrastructure.persistence.RepositoryRepository
 import com.example.gitserver.module.user.infrastructure.persistence.UserRepository
 import com.example.gitserver.module.user.exception.UserNotFoundException
+import com.example.gitserver.common.util.LogContext
 import mu.KotlinLogging
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
@@ -69,7 +70,13 @@ class PullRequestCommentCommandHandler(
         )
         val saved = commentRepository.save(entity)
 
-        events.publishEvent(PullRequestCommentCreated(pr.id, saved.id, type))
+        LogContext.with(
+            "eventType" to "PR_COMMENT_CREATED",
+            "repoId" to repo.id.toString(),
+            "prId" to pr.id.toString()
+        ) {
+            events.publishEvent(PullRequestCommentCreated(pr.id, saved.id, type))
+        }
 
         log.info { "[PR][Comment][Create] pr=${pr.id} by=${author.id} commentId=${saved.id}" }
         return saved.id
@@ -94,7 +101,13 @@ class PullRequestCommentCommandHandler(
         if (!(owner || authorOfComment)) throw PermissionDenied()
 
         commentRepository.delete(comment)
-        events.publishEvent(PullRequestCommentDeleted(pr.id, comment.id))
+        LogContext.with(
+            "eventType" to "PR_COMMENT_DELETED",
+            "repoId" to repo.id.toString(),
+            "prId" to pr.id.toString()
+        ) {
+            events.publishEvent(PullRequestCommentDeleted(pr.id, comment.id))
+        }
         log.info { "[PR][Comment][Delete] pr=${pr.id} by=${requester.id} commentId=${comment.id}" }
     }
 }

@@ -1,6 +1,6 @@
 package com.example.gitserver.module.pullrequest.interfaces.graphql
 
-import com.example.gitserver.module.gitindex.application.query.CommitQueryService
+import com.example.gitserver.module.gitindex.indexer.application.query.CommitQueryService
 import com.example.gitserver.module.pullrequest.application.query.model.PullRequestDetail
 import com.example.gitserver.module.pullrequest.application.service.PullRequestCommitMappingService
 import com.example.gitserver.module.repository.interfaces.dto.CommitResponse
@@ -20,6 +20,7 @@ class PullRequestDetailFieldResolver(
     @SchemaMapping(typeName = "PullRequestDetail", field = "commits")
     fun commits(source: PullRequestDetail): List<CommitResponse> {
         val hashes = mappingService.listHashes(source.id).take(MAX_COMMITS)
-        return hashes.mapNotNull { h -> commitQuery.getCommitInfo(source.repositoryId, h) }
+        val map = commitQuery.getCommitInfoBatch(source.repositoryId, hashes)
+        return hashes.mapNotNull { h -> map[h] }
     }
 }

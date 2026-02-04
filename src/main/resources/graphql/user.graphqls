@@ -3,5 +3,3 @@ type RepositoryUserResponse {
     nickname: String!
     profileImageUrl: String
 }
-
-

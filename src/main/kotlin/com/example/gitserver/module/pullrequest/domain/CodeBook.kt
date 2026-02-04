@@ -1,6 +1,6 @@
 package com.example.gitserver.module.pullrequest.domain
 
-import com.example.gitserver.module.gitindex.domain.vo.MergeType
+import com.example.gitserver.module.gitindex.shared.domain.vo.MergeType
 
 enum class PrStatus { OPEN, CLOSED, MERGED }
 enum class PrReviewStatus { PENDING, APPROVED, CHANGES_REQUESTED, DISMISSED }

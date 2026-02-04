@@ -1,8 +1,7 @@
 package com.example.gitserver.module.repository.application.command.handler
 
-import com.example.gitserver.module.common.cache.RepoCacheEvictor
-import com.example.gitserver.module.common.cache.registerRepoCacheEvictionAfterCommit
-import com.example.gitserver.module.common.cache.registerRepoCacheEvictionAfterCommitForRepo
+import com.example.gitserver.common.cache.RepoCacheEvictor
+import com.example.gitserver.common.cache.registerRepoCacheEvictionAfterCommitForRepo
 import com.example.gitserver.module.repository.application.command.AddRepositoryStarCommand
 import com.example.gitserver.module.repository.application.command.RemoveRepositoryStarCommand
 import com.example.gitserver.module.repository.domain.RepositoryStar
@@ -13,13 +12,12 @@ import com.example.gitserver.module.repository.exception.UserNotFoundException
 import com.example.gitserver.module.repository.infrastructure.persistence.RepositoryRepository
 import com.example.gitserver.module.repository.infrastructure.persistence.RepositoryStarRepository
 import com.example.gitserver.module.user.infrastructure.persistence.UserRepository
+import com.example.gitserver.common.util.LogContext
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import jakarta.persistence.LockModeType
-import org.springframework.data.jpa.repository.Lock
 import java.time.LocalDateTime
 
 @Service
@@ -52,7 +50,13 @@ class RepositoryStarCommandHandler(
         }
         registerRepoCacheEvictionAfterCommitForRepo(evictor, repoId = repo.id)
 
-        events.publishEvent(RepositoryStarred(repo.id, user.id))
+        LogContext.with(
+            "eventType" to "REPO_STARRED",
+            "repoId" to repo.id.toString()
+        ) {
+            log.info("[Repo-Star] starred event published repo={} user={}", repo.id, user.id)
+            events.publishEvent(RepositoryStarred(repo.id, user.id))
+        }
     }
 
     @Transactional
@@ -63,6 +67,12 @@ class RepositoryStarCommandHandler(
         starRepository.deleteByUserIdAndRepositoryId(command.requesterId, repo.id)
 
         registerRepoCacheEvictionAfterCommitForRepo(evictor, repoId = repo.id)
-        events.publishEvent(RepositoryUnstarred(repo.id, command.requesterId))
+        LogContext.with(
+            "eventType" to "REPO_UNSTARRED",
+            "repoId" to repo.id.toString()
+        ) {
+            log.info("[Repo-Star] unstarred event published repo={} user={}", repo.id, command.requesterId)
+            events.publishEvent(RepositoryUnstarred(repo.id, command.requesterId))
+        }
     }
 }

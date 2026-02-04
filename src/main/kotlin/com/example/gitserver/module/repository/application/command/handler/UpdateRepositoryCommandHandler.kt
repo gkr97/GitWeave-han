@@ -1,10 +1,11 @@
 package com.example.gitserver.module.repository.application.command.handler
 
-import com.example.gitserver.module.gitindex.domain.port.GitRepositoryPort
+import com.example.gitserver.module.gitindex.shared.domain.port.GitRepositoryPort
 import com.example.gitserver.module.repository.application.command.UpdateRepositoryCommand
 import com.example.gitserver.module.repository.domain.event.RepositoryRenamed
 import com.example.gitserver.module.repository.domain.policy.RepoAccessPolicy
 import com.example.gitserver.module.repository.infrastructure.persistence.RepositoryRepository
+import com.example.gitserver.common.util.LogContext
 import mu.KotlinLogging
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
@@ -51,7 +52,13 @@ class UpdateRepositoryCommandHandler(
         repositoryRepository.save(repo)
 
         if (isNameChanged) {
-            events.publishEvent(RepositoryRenamed(repo.id, oldName, repo.name))
+            LogContext.with(
+                "eventType" to "REPO_RENAMED",
+                "repoId" to repo.id.toString()
+            ) {
+                log.info { "[Repo] renamed event published" }
+                events.publishEvent(RepositoryRenamed(repo.id, oldName, repo.name))
+            }
             TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
                 override fun afterCommit() {
                     try {

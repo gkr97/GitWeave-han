@@ -5,10 +5,11 @@ import com.example.gitserver.module.pullrequest.application.query.PullRequestDif
 import com.example.gitserver.module.pullrequest.application.service.PullRequestDiscussionAssembler
 import com.example.gitserver.module.pullrequest.application.query.support.UnifiedDiffMapper
 import com.example.gitserver.module.pullrequest.interfaces.dto.FileDiffResponse
+import com.example.gitserver.module.pullrequest.application.query.model.PullRequestDetail
 import com.example.gitserver.module.user.domain.CustomUserDetails
 import org.springframework.graphql.data.method.annotation.Argument
-import org.springframework.graphql.data.method.annotation.QueryMapping
-import org.springframework.security.core.annotation.AuthenticationPrincipal
+import org.springframework.graphql.data.method.annotation.ContextValue
+import org.springframework.graphql.data.method.annotation.SchemaMapping
 import org.springframework.stereotype.Controller
 
 @Controller
@@ -18,33 +19,32 @@ class PullRequestFileQueryResolver(
     private val discussionAssembler: PullRequestDiscussionAssembler
 ) {
 
-    @QueryMapping
-    fun repositoryPullRequestFiles(
-        @Argument prId: Long,
-        @AuthenticationPrincipal user: CustomUserDetails?
-    ) = fileService.listFiles(prId, user?.getUserId())
+    @SchemaMapping(typeName = "PullRequestDetail", field = "files")
+    fun files(
+        pr: PullRequestDetail,
+        @ContextValue(name = "currentUser", required = false) user: CustomUserDetails?
+    ) = fileService.listFiles(pr.id, user?.getUserId())
 
-    @QueryMapping
-    fun repositoryPullRequestDiffs(
-        @Argument prId: Long,
-        @AuthenticationPrincipal user: CustomUserDetails?
-    ) = fileService.listDiffs(prId, user?.getUserId())
+    @SchemaMapping(typeName = "PullRequestDetail", field = "diffs")
+    fun diffs(
+        pr: PullRequestDetail,
+        @ContextValue(name = "currentUser", required = false) user: CustomUserDetails?
+    ) = fileService.listDiffs(pr.id, user?.getUserId())
 
-    @QueryMapping
-    fun repositoryPullRequestFileDiff(
-        @Argument repositoryId: Long,
-        @Argument prId: Long,
+    @SchemaMapping(typeName = "PullRequestDetail", field = "fileDiff")
+    fun fileDiff(
+        pr: PullRequestDetail,
         @Argument filePath: String,
         @Argument forceFull: Boolean?,
-        @AuthenticationPrincipal user: CustomUserDetails?
+        @ContextValue(name = "currentUser", required = false) user: CustomUserDetails?
     ): FileDiffResponse {
         // Path Traversal 방어
         val safeFilePath = com.example.gitserver.common.util.PathSecurityUtils.sanitizePath(filePath)
-        val userId = user?.getUserId()
+        val currentUserId = user?.getUserId()
 
-        val files = fileService.listFiles(prId, userId)
+        val files = fileService.listFiles(pr.id, currentUserId)
         val fileMeta = files.firstOrNull { it.path == safeFilePath }
-            ?: error("PR($prId)에서 파일 메타데이터를 찾을 수 없습니다. path=$filePath")
+            ?: error("PR(${pr.id})에서 파일 메타데이터를 찾을 수 없습니다. path=$filePath")
 
         if (fileMeta.isBinary) {
             return UnifiedDiffMapper.toResponse(
@@ -63,15 +63,15 @@ class PullRequestFileQueryResolver(
         }
 
         val (parsed, truncated) = diffService.getFileParsedHunks(
-            repositoryId = repositoryId,
-            prId = prId,
+            repositoryId = pr.repositoryId,
+            prId = pr.id,
             path = safeFilePath,
             totalFiles = files.size,
             forceFull = forceFull == true
         )
 
         val threads = if (!truncated) {
-            discussionAssembler.buildThreads(prId, safeFilePath, parsed)
+            discussionAssembler.buildThreads(pr.id, safeFilePath, parsed)
         } else emptyList()
 
         return UnifiedDiffMapper.toResponse(
@@ -89,4 +89,3 @@ class PullRequestFileQueryResolver(
         )
     }
 }
-

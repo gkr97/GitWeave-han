@@ -2,7 +2,9 @@ package com.example.gitserver.common.exception
 
 import jakarta.servlet.*
 import jakarta.servlet.http.HttpServletRequest
+import com.example.gitserver.module.user.domain.CustomUserDetails
 import org.slf4j.MDC
+import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Component
 import java.util.UUID
 
@@ -16,6 +18,13 @@ class CorrelationIdFilter : Filter {
         val http = req as HttpServletRequest
         val cid = http.getHeader("X-Correlation-Id") ?: UUID.randomUUID().toString()
         MDC.put("correlationId", cid)
-        try { chain.doFilter(req, res) } finally { MDC.remove("correlationId") }
+        val principal = SecurityContextHolder.getContext().authentication?.principal
+        if (principal is CustomUserDetails) {
+            MDC.put("userId", principal.getUserId().toString())
+        }
+        try { chain.doFilter(req, res) } finally {
+            MDC.remove("correlationId")
+            MDC.remove("userId")
+        }
     }
 }

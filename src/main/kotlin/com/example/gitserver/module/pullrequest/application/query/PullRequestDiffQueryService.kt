@@ -1,11 +1,11 @@
 package com.example.gitserver.module.pullrequest.application.query
 
-import com.example.gitserver.module.gitindex.domain.port.GitDiffPort
+import com.example.gitserver.module.gitindex.shared.domain.port.GitDiffPort
 import com.example.gitserver.module.pullrequest.application.query.support.ParsedHunk
 import com.example.gitserver.module.pullrequest.application.query.support.UnifiedDiffParser
 import com.example.gitserver.module.pullrequest.infrastructure.persistence.PullRequestRepository
 import com.example.gitserver.module.repository.exception.RepositoryNotFoundException
-import com.example.gitserver.module.gitindex.infrastructure.git.GitPathResolver
+import com.example.gitserver.module.gitindex.storage.infrastructure.git.GitPathResolver
 import mu.KotlinLogging
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional

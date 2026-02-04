@@ -3,20 +3,6 @@ scalar Long
 type Query {
     repository(id: Long!, branch: String): RepositoryResponse!
 
-    repositoryFileTree(
-        repositoryId: Long!
-        commitHash: String
-        path: String
-        branch: String
-    ): [TreeNodeResponse!]!
-
-    repositoryFileContent(
-        repositoryId: Long!
-        commitHash: String
-        path: String!
-        branch: String
-    ): FileContentResponse!
-
     myRepositoriesConnection(
         first: Int
         after: String
@@ -39,6 +25,13 @@ type Query {
     ): RepositoryListItemConnection!
 
     userByNickname(nickname: String!): RepositoryUserResponse
+    repositoryFileExplorer(
+        repositoryId: Long!
+        treePath: String
+        filePath: String
+        branch: String
+        commitHash: String
+    ): FileExplorerResponse!
 }
 
 interface Node { id: ID! }
@@ -91,7 +84,9 @@ type RepositoryResponse {
     defaultBranch: String!
     branches: [BranchResponse!]!
     stats: RepositoryStatsResponse!
-    fileTree: [TreeNodeResponse!]!
+
+    fileTree(path: String, branch: String, commitHash: String): [TreeNodeResponse!]!
+    fileContent(path: String!, branch: String, commitHash: String): FileContentResponse!
 }
 
 type RepositoryListItem {
@@ -105,34 +100,6 @@ type RepositoryListItem {
     isInvited: Boolean!
     ownerInfo: RepositoryUserResponse
     language: String
-}
-
-type UserRepositoriesResult {
-    profile: RepositoryUserResponse!
-    repositories: UserRepositoryListPageResponse!
-}
-
-type UserRepositoryListPageResponse {
-    content: [RepositoryListItem!]!
-    page: Int!
-    size: Int!
-    totalElements: Int!
-    totalPages: Int!
-    hasNext: Boolean!
-}
-
-type MyRepositoriesResponse {
-    profile: RepositoryUserResponse!
-    repositories: RepositoryListPageResponse!
-}
-
-type RepositoryListPageResponse {
-    content: [RepositoryListItem!]!
-    page: Int!
-    size: Int!
-    totalElements: Int!
-    totalPages: Int!
-    hasNext: Boolean!
 }
 
 type TreeNodeResponse {
@@ -188,4 +155,9 @@ type RepositoryStatsResponse {
     issues: Int!
     pullRequests: Int!
     lastCommitAt: String
+}
+
+type FileExplorerResponse {
+    fileTree: [TreeNodeResponse!]!
+    fileContent: FileContentResponse
 }

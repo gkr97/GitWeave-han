@@ -1,9 +1,9 @@
 package com.example.gitserver.module.repository.application.command.handler
 
 import com.example.gitserver.common.util.GitRefUtils
-import com.example.gitserver.module.common.cache.RepoCacheEvictor
-import com.example.gitserver.module.common.cache.registerRepoCacheEvictionAfterCommit
-import com.example.gitserver.module.gitindex.application.query.CommitQueryService
+import com.example.gitserver.common.cache.RepoCacheEvictor
+import com.example.gitserver.common.cache.registerRepoCacheEvictionAfterCommit
+import com.example.gitserver.module.gitindex.indexer.application.query.CommitQueryService
 import com.example.gitserver.module.repository.domain.Branch
 import com.example.gitserver.module.repository.domain.event.SyncBranchEvent
 import com.example.gitserver.module.repository.exception.RepositoryNotFoundException

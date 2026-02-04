@@ -4,7 +4,7 @@
 
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg [cid=%X{correlationId}] [event=%X{eventType} repo=%X{repoId} branch=%X{branch} pr=%X{prId} user=%X{userId}]%n</pattern>
         </encoder>
     </appender>
 
@@ -15,7 +15,7 @@
             <maxHistory>30</maxHistory>
         </rollingPolicy>
         <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg [cid=%X{correlationId}] [event=%X{eventType} repo=%X{repoId} branch=%X{branch} pr=%X{prId} user=%X{userId}]%n</pattern>
         </encoder>
     </appender>
 
@@ -27,6 +27,10 @@
 
     <!-- Spring Cache: 히트/미스/적재/에빅트 -->
     <logger name="org.springframework.cache" level="TRACE"/>
+
+
+
+
     <logger name="org.springframework.cache.interceptor" level="TRACE"/>
 
     <!-- Caffeine 사용 시 내부 캐시 이벤트 -->

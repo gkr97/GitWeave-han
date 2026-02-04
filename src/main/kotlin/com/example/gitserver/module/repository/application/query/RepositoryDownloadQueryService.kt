@@ -1,12 +1,10 @@
 package com.example.gitserver.module.repository.application.query
 
-import com.example.gitserver.module.common.application.service.CommonCodeCacheService
-import com.example.gitserver.module.gitindex.infrastructure.git.GitArchiveAdapter
+import com.example.gitserver.module.gitindex.storage.infrastructure.git.GitArchiveAdapter
 import com.example.gitserver.module.repository.domain.vo.DownloadInfo
-import com.example.gitserver.module.repository.infrastructure.persistence.CollaboratorRepository
 import com.example.gitserver.module.repository.infrastructure.persistence.RepositoryRepository
 import com.example.gitserver.module.repository.exception.*
-import com.example.gitserver.module.common.cache.RequestCache
+import com.example.gitserver.common.cache.RequestCache
 import mu.KotlinLogging
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional

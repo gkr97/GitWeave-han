@@ -7,10 +7,10 @@ import com.example.gitserver.common.pagination.PageInfoDTO
 import com.example.gitserver.common.pagination.SortDirection as KeysetDir
 import com.example.gitserver.common.util.GitRefUtils
 import com.example.gitserver.module.common.application.service.CommonCodeCacheService
-import com.example.gitserver.module.common.cache.RequestCache
-import com.example.gitserver.module.gitindex.application.query.CommitQueryService
-import com.example.gitserver.module.gitindex.application.query.ReadmeQueryService
-import com.example.gitserver.module.gitindex.domain.port.GitRepositoryPort
+import com.example.gitserver.common.cache.RequestCache
+import com.example.gitserver.module.gitindex.indexer.application.query.CommitQueryService
+import com.example.gitserver.module.gitindex.indexer.application.query.ReadmeQueryService
+import com.example.gitserver.module.gitindex.shared.domain.port.GitRepositoryPort
 import com.example.gitserver.module.pullrequest.infrastructure.persistence.PullRequestRepository
 import com.example.gitserver.module.repository.application.query.model.*
 import com.example.gitserver.module.repository.exception.*
@@ -62,14 +62,15 @@ class RepositoryQueryService(
         val visibility = visibilityMap[repo.visibilityCodeId]
             ?: throw InvalidVisibilityCodeException(repo.visibilityCodeId?.toString())
 
+        val isOwnerFlag = currentUserId != null && repo.owner.id == currentUserId
+        val isInvitedFlag = currentUserId?.let { uid ->
+            requestCache.getCollabExists(repoId, uid)
+                ?: collaboratorRepository.existsByRepositoryIdAndUserId(repoId, uid)
+                    .also { requestCache.putCollabExists(repoId, uid, it) }
+        } ?: false
+
         if (visibility == "PRIVATE") {
-            val isOwner = repo.owner.id == currentUserId
-            val isCollaborator = currentUserId?.let { uid ->
-                requestCache.getCollabExists(repoId, uid)
-                    ?: collaboratorRepository.existsByRepositoryIdAndUserId(repoId, uid)
-                        .also { requestCache.putCollabExists(repoId, uid, it) }
-            } ?: false
-            if (!isOwner && !isCollaborator) {
+            if (!isOwnerFlag && !isInvitedFlag) {
                 throw RepositoryAccessDeniedException(repoId, currentUserId)
             }
         }
@@ -193,9 +194,9 @@ class RepositoryQueryService(
             createdAt = repo.createdAt,
             lastUpdatedAt = repo.updatedAt,
             owner = owner,
-            isOwner = false,
+            isOwner = isOwnerFlag,
             isStarred = isStarredFlag,
-            isInvited = false,
+            isInvited = isInvitedFlag,
             contributors = contributors,
             openPrCount = openPrCount,
             languageStats = languageStats,
@@ -221,7 +222,9 @@ class RepositoryQueryService(
     }
 
     private fun enrichAuthor(user: RepositoryUserResponse): RepositoryUserResponse {
-        val userEntity = userRepository.findById(user.userId).orElse(null)
+        val cached = runCatching { requestCache.getUser(user.userId) }.getOrNull()
+        val userEntity = cached ?: userRepository.findById(user.userId).orElse(null)
+            ?.also { runCatching { requestCache.putUser(it) } }
         return userEntity?.let {
             RepositoryUserResponse(
                 userId = it.id,

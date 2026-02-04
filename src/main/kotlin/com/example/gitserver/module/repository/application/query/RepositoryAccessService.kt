@@ -1,7 +1,7 @@
 package com.example.gitserver.module.repository.application.query
 
 import com.example.gitserver.module.common.application.service.CommonCodeCacheService
-import com.example.gitserver.module.common.cache.RequestCache
+import com.example.gitserver.common.cache.RequestCache
 import com.example.gitserver.module.repository.domain.Repository
 import com.example.gitserver.module.repository.exception.RepositoryAccessDeniedException
 import com.example.gitserver.module.repository.infrastructure.persistence.CollaboratorRepository
